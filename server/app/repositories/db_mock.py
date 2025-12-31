@@ -21,5 +21,6 @@ PROJECTS = [
 RUBRICS = []
 GRADES = []
 
+
 def now_str():
     return str(datetime.now())

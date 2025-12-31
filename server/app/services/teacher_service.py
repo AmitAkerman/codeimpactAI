@@ -1,31 +1,48 @@
 import random
+
 from fastapi import HTTPException
 
+from server.app.repositories.projects_repo import list_submissions_by_student, update_submission_grade
+from server.app.repositories.rubrics_repo import insert_assignment, list_all_assignments, get_assignment
 from server.app.repositories.users_repo import list_students
-from server.app.repositories.projects_repo import list_projects_by_student, join_projects_with_grades, set_project_graded
-from server.app.repositories.rubrics_repo import insert_rubric, list_rubrics, get_rubric
-from server.app.repositories.grades_repo import insert_grade
+
 
 def get_students():
     students = list_students()
-    # add project_count
-    from server.app.repositories.projects_repo import list_projects_by_student
+    # Add project count for UI
     for s in students:
-        s["project_count"] = len(list_projects_by_student(s["id"]))
+        subs = list_submissions_by_student(s["id"])
+        s["project_count"] = len(subs)
     return students
 
-def get_student_projects(student_id: int):
-    projs = list_projects_by_student(student_id)
-    return join_projects_with_grades(projs)
 
-def create_rubric(teacher_id: int, title: str, criteria: list[dict]):
-    return insert_rubric(teacher_id, title, criteria)
+def create_rubric(teacher_id: str, title: str, class_name: str, criteria: list[dict]):
+    return insert_assignment(teacher_id, title, class_name, criteria)
+
 
 def get_rubrics():
-    return list_rubrics()
+    # Returns all assignments (used as rubrics)
+    return list_all_assignments()
+
+
+def get_student_projects(student_id: str):
+    # Fetch submissions
+    submissions = list_submissions_by_student(student_id)
+
+    # We need to manually fetch titles for these submissions because 'submissions' table has no title
+    # In a real app, you'd do a JOIN in the repo. Here we loop (n+1) or fetch all.
+    # Optimization: Fetch all assignments once and map.
+    all_assigns = {a["id"]: a["title"] for a in list_all_assignments()}
+
+    for sub in submissions:
+        aid = sub.get("assignment_id")
+        sub["title"] = all_assigns.get(aid, "Unknown Assignment")
+
+    return submissions
+
 
 def analyze_ai(project_url: str, rubric_id: str):
-    rubric = get_rubric(rubric_id)
+    rubric = get_assignment(rubric_id)
     if not rubric:
         raise HTTPException(status_code=404, detail="Rubric not found")
 
@@ -48,7 +65,8 @@ def analyze_ai(project_url: str, rubric_id: str):
         "details": ai_results,
     }
 
+
 def submit_grade(data: dict):
-    insert_grade(data)
-    set_project_graded(data["project_id"])
+    # Use update_submission_grade from repo
+    update_submission_grade(data["project_id"], data["total_score"], data["feedback"])
     return {"message": "Grade Saved"}

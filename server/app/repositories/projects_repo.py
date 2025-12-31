@@ -1,41 +1,53 @@
-import uuid
-from .db_mock import PROJECTS, GRADES, now_str
+from .db import supabase, now_str
 
-def list_projects_by_student(student_id: int):
-    return [p for p in PROJECTS if p["student_id"] == student_id]
+def list_submissions_by_student(student_id: str):
+    # Selects from 'submissions' table
+    response = supabase.table("submissions").select("*").eq("student_id", student_id).execute()
 
-def insert_project(student_id: int, title: str, link: str):
-    new_p = {
-        "id": str(uuid.uuid4())[:8],
+    projects = []
+    for row in response.data:
+        projects.append({
+            "id": row["id"],
+            "student_id": row["student_id"],
+            "assignment_id": row["assignment_id"],
+            "link": row["link"],
+            "status": row["status"] or "Pending",
+            "submitted_at": row["submitted_at"],
+            "score": row.get("final_score"),
+            "feedback": row.get("feedback")
+        })
+    return projects
+
+def list_all_submissions():
+    """Fetches all submissions for admin stats."""
+    response = supabase.table("submissions").select("*").execute()
+    return response.data if response.data else []
+
+def insert_submission(student_id: str, assignment_id: str, link: str):
+    new_sub = {
         "student_id": student_id,
-        "title": title,
+        "assignment_id": assignment_id,
         "link": link,
         "status": "Pending",
-        "submitted_at": now_str(),
+        "submitted_at": now_str()
     }
-    PROJECTS.append(new_p)
-    return new_p
+    response = supabase.table("submissions").insert(new_sub).execute()
+    row = response.data[0]
 
-def set_project_graded(project_id: str):
-    for p in PROJECTS:
-        if p["id"] == project_id:
-            p["status"] = "Graded"
-            return True
-    return False
+    return {
+        "id": row["id"],
+        "student_id": row["student_id"],
+        "assignment_id": row["assignment_id"],
+        "link": row["link"],
+        "status": row["status"],
+        "submitted_at": row["submitted_at"]
+    }
 
-def get_project(project_id: str):
-    return next((p for p in PROJECTS if p["id"] == project_id), None)
-
-def join_projects_with_grades(projects: list[dict]):
-    results = []
-    for p in projects:
-        grade = next((g for g in GRADES if g["project_id"] == p["id"]), None)
-        p_data = p.copy()
-        if grade:
-            p_data["status"] = "Graded"
-            p_data["score"] = grade["total_score"]
-            p_data["feedback"] = grade["feedback"]
-        else:
-            p_data["status"] = "Pending"
-        results.append(p_data)
-    return results
+def update_submission_grade(submission_id: str, score: int, feedback: str):
+    update_data = {
+        "final_score": score,
+        "feedback": feedback,
+        "status": "Graded"
+    }
+    response = supabase.table("submissions").update(update_data).eq("id", submission_id).execute()
+    return response.data[0] if response.data else None
