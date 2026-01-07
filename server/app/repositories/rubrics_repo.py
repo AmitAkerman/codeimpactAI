@@ -59,3 +59,11 @@ def get_assignment(assignment_id: str):
         "criteria": data["rubric"]
     }
 
+def update_assignment(assignment_id: str, title: str, class_name: str, criteria: list[dict]):
+    update_data = {
+        "title": title,
+        "class_name": class_name,
+        "rubric": criteria
+    }
+    response = supabase.table("assignments").update(update_data).eq("id", assignment_id).execute()
+    return response.data[0] if response.data else None

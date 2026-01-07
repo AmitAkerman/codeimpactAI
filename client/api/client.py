@@ -19,3 +19,11 @@ def get(path: str):
 
 def post(path: str, json: dict):
     return _handle(requests.post(f"{API_URL}{path}", json=json))
+
+def put(path: str, json: dict):
+    return _handle(requests.put(f"{API_URL}{path}", json=json))
+
+def post_file(path: str, files: dict):
+    # Determine if we are sending other data or just files.
+    # For this specific case, we usually just send the file.
+    return _handle(requests.post(f"{API_URL}{path}", files=files))
