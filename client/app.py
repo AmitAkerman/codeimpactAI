@@ -6,7 +6,7 @@ from supabase import create_client, Client
 
 from api.client import API_URL
 
-# --- 1. CONFIGURATION ---
+# --- CONFIGURATION ---
 SUPABASE_URL = "https://hmouoztlgrsotauzohgm.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtb3VvenRsZ3Jzb3RhdXpvaGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMjgwNjUsImV4cCI6MjA3OTkwNDA2NX0.7lICVEIkYaG_629xN_nVPUJspUgkhRswkKJKTF2TNBg"
 
@@ -21,13 +21,10 @@ def init_supabase():
 
 
 supabase = init_supabase()
-
 st.set_page_config(page_title="CodeImpact AI", page_icon="🎓", layout="wide")
 
-# --- 2. CSS STYLES ---
 st.markdown("""
 <style>
-    /* Removed max-width restriction to use full page width */
     .role-card {
         background: white; padding: 20px; border-radius: 10px; border: 1px solid #ddd;
         text-align: center; height: 200px; display: flex; flex-direction: column;
@@ -35,14 +32,9 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
     .role-card:hover { border-color: #4CAF50; transform: translateY(-3px); }
-    .metric-card {
-        background-color: #f0f2f6; border-radius: 10px; padding: 15px; text-align: center;
-    }
-    .rubric-header { font-weight: bold; font-size: 1.1em; margin-top: 10px; color: #333; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. SESSION STATE ---
 if "page" not in st.session_state: st.session_state.page = "home"
 if "auth_user" not in st.session_state: st.session_state.auth_user = None
 
@@ -62,26 +54,20 @@ def logout():
 # ==========================================
 if st.session_state.page == "home":
     st.markdown("<h1 style='text-align: center;'>CodeImpact AI 🚀</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: gray;'>Where Code Meets Social Impact</h3>",
-                unsafe_allow_html=True)
     st.divider()
-
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown("""<div class="role-card"><h1>👨‍🎓</h1><h3>Student</h3><p>Submit projects</p></div>""",
-                    unsafe_allow_html=True)
+        st.markdown("""<div class="role-card"><h1>👨‍🎓</h1><h3>Student</h3></div>""", unsafe_allow_html=True)
         if st.button("Student Login", width='stretch'):
             st.session_state.target = "student"
             navigate("login")
     with c2:
-        st.markdown("""<div class="role-card"><h1>🏫</h1><h3>Teacher</h3><p>Manage grading</p></div>""",
-                    unsafe_allow_html=True)
+        st.markdown("""<div class="role-card"><h1>🏫</h1><h3>Teacher</h3></div>""", unsafe_allow_html=True)
         if st.button("Teacher Login", width='stretch'):
             st.session_state.target = "teacher"
             navigate("login")
     with c3:
-        st.markdown("""<div class="role-card"><h1>🛡️</h1><h3>Admin</h3><p>System logs</p></div>""",
-                    unsafe_allow_html=True)
+        st.markdown("""<div class="role-card"><h1>🛡️</h1><h3>Admin</h3></div>""", unsafe_allow_html=True)
         if st.button("Admin Login", width='stretch'):
             st.session_state.target = "admin"
             navigate("login")
@@ -97,63 +83,22 @@ elif st.session_state.page == "login":
             st.markdown(f"<h3 style='text-align: center;'>{tgt.capitalize()} Login</h3>", unsafe_allow_html=True)
             u = st.text_input("Username")
             p = st.text_input("Password", type="password")
-
-            class_input = ""
             if tgt == "student":
-                class_input = st.text_input("Class Name (e.g. Class 5A)")
+                st.caption("Tip: Your class name is loaded from your profile.")
 
             if st.form_submit_button("Sign In", width='stretch'):
-                # 1. Fetch all users
                 res = supabase.table("users").select("*").execute()
                 found_user = None
-                clean_u = u.strip().lower()
-
                 if res.data:
                     for user in res.data:
-                        if user["username"].strip().lower() == clean_u:
+                        if user["username"].strip().lower() == u.strip().lower():
                             found_user = user
                             break
-
-                if found_user:
-                    if str(found_user["password"]) == p.strip():
-                        if found_user["role"] != tgt:
-                            st.error(f"User found, but is not a {tgt}.")
-                        elif tgt == "student" and found_user.get("class_name") != class_input.strip():
-                            st.error(f"You are registered in '{found_user.get('class_name')}', not '{class_input}'.")
-                        else:
-                            st.session_state.auth_user = found_user
-                            st.success("Success!")
-                            time.sleep(0.5)
-                            navigate("dashboard")
-                    else:
-                        st.error("Invalid Password")
+                if found_user and str(found_user["password"]) == p.strip():
+                    st.session_state.auth_user = found_user
+                    navigate("dashboard")
                 else:
-                    if tgt == "student" and class_input:
-                        class_check = supabase.table("assignments").select("id").eq("class_name", class_input.strip()).execute()
-                        if class_check.data and len(class_check.data) > 0:
-                            new_student_data = {
-                                "username": u.strip(),
-                                "password": p.strip(),
-                                "role": "student",
-                                "full_name": u.strip(),
-                                "class_name": class_input.strip()
-                            }
-                            try:
-                                create_res = supabase.table("users").insert(new_student_data).execute()
-                                if create_res.data:
-                                    st.session_state.auth_user = create_res.data[0]
-                                    st.success(f"Account created for class '{class_input.strip()}'! Logging in...")
-                                    time.sleep(1)
-                                    navigate("dashboard")
-                                else:
-                                    st.error("Failed to auto-create account.")
-                            except Exception as e:
-                                st.error(f"Error creating account: {e}")
-                        else:
-                            st.error(f"Class '{class_input}' does not exist (no assignments found). Please contact your teacher.")
-                    else:
-                        st.error("User not found")
-
+                    st.error("Invalid Credentials")
     if st.button("Back"): navigate("home")
 
 # ==========================================
@@ -164,322 +109,360 @@ elif st.session_state.page == "dashboard":
     role = user["role"]
 
     st.sidebar.title(f"👤 {user.get('full_name', user['username'])}")
-    st.sidebar.write(f"Role: {role.capitalize()}")
-    if role == "student":
-        st.sidebar.write(f"Class: {user.get('class_name')}")
     if st.sidebar.button("Logout"): logout()
 
-    # --- STUDENT VIEW ---
-    if role == "student":
-        st.title("My Assignments")
-        assigns = supabase.table("assignments").select("*").eq("class_name", user['class_name']).execute().data
-        subs = supabase.table("submissions").select("*").eq("student_id", user['id']).execute().data
-        sub_map = {s['assignment_id']: s for s in subs}
-
-        if not assigns:
-            st.info("No assignments found for your class.")
-
-        for a in assigns:
-            with st.container(border=True):
-                c1, c2 = st.columns([3, 1])
-                c1.subheader(a['title'])
-
-                my_sub = sub_map.get(a['id'])
-                if my_sub:
-                    status = my_sub['status']
-                    c1.write(f"**Status:** {status}")
-                    c1.write(f"**Link:** {my_sub['link']}")
-                    if status == "Graded":
-                        c1.success(f"Feedback: {my_sub.get('feedback')}")
-                        c2.metric("Score", my_sub.get('final_score'))
-                    else:
-                        c2.info("Pending")
-                else:
-                    c1.warning("Not Submitted")
-                    with c2.popover("Submit Now"):
-                        link = st.text_input("Project Link", key=a['id'])
-                        if st.button("Submit", key=f"btn_{a['id']}"):
-                            supabase.table("submissions").insert({
-                                "student_id": user['id'],
-                                "assignment_id": a['id'],
-                                "link": link,
-                                "status": "Pending"
-                            }).execute()
-                            st.success("Submitted!")
-                            st.rerun()
-
-    # --- TEACHER VIEW ---
-    elif role == "teacher":
+    # --- TEACHER DASHBOARD ---
+    if role == "teacher":
         st.title("Teacher Dashboard")
-        tab1, tab2 = st.tabs(["Grading", "Create Assignment (Rubrics)"])
+        tab1, tab2 = st.tabs(["Grading", "Manage Assignments"])
 
-        # Fetch commonly used data
-        all_assigns_data = supabase.table("assignments").select("*").execute().data
-        all_assigns_map = {a['id']: a for a in all_assigns_data}
-
+        # TAB 1: Grading
         with tab1:
             st.subheader("Student Submissions")
             all_subs = supabase.table("submissions").select("*").execute().data
             all_users = {u['id']: u['full_name'] for u in
                          supabase.table("users").select("id, full_name").execute().data}
+            all_assigns = {a['id']: a for a in supabase.table("assignments").select("*").execute().data}
 
             if not all_subs:
                 st.info("No submissions yet.")
 
-            pending_subs = [s for s in all_subs if s['status'] == 'Pending']
-            graded_subs = [s for s in all_subs if s['status'] == 'Graded']
-
-            st.markdown(f"**Pending:** {len(pending_subs)} | **Graded:** {len(graded_subs)}")
-
             for s in all_subs:
-                s_name = all_users.get(s['student_id'], "Unknown Student")
-                assign_details = all_assigns_map.get(s['assignment_id'], {})
-                a_title = assign_details.get('title', "Unknown Assignment")
-                rubric = assign_details.get("rubric", [])
+                s_name = all_users.get(s['student_id'], "Unknown")
+                a_title = all_assigns.get(s['assignment_id'], {}).get('title', "Unknown")
 
-                status_icon = "✅" if s['status'] == "Graded" else "Dg"
-                with st.expander(f"{status_icon} {s_name} - {a_title}"):
-                    st.write(f"**Project Link:** {s['link']}")
+                with st.expander(f"{s_name} - {a_title}"):
+                    st.write(f"Link: {s['link']}")
 
-                    # --- NEW GRADING VIEW (NESTED) ---
-                    if rubric:
-                        st.info("📋 **Rubric Assessment**")
-                        # Handle both flat list (old) and nested list (new)
-                        is_nested = isinstance(rubric, list) and len(rubric) > 0 and isinstance(rubric[0], dict) and "sub_criteria" in rubric[0]
+                    # AI Button
+                    if st.button("🤖 Analyze with AI", key=f"ai_{s['id']}"):
+                        with st.spinner("Analyzing..."):
+                            try:
+                                res = requests.post(f"{API_URL}/teacher/analyze_ai", json={"project_url": s['link'],
+                                                                                           "rubric_id": s[
+                                                                                               'assignment_id']}).json()
+                                st.session_state[f"sc_{s['id']}"] = res.get("suggested_score", 0)
+                                st.session_state[f"fb_{s['id']}"] = res.get("suggested_feedback", "")
+                                st.success("Analysis Complete")
+                            except Exception as e:
+                                st.error(f"Error: {e}")
 
-                        if is_nested:
-                            for cat in rubric:
-                                if isinstance(cat, dict):
-                                    c_name = cat.get("name", "Unnamed Category")
-                                    c_weight = cat.get("weight", 0)
-                                    st.markdown(f"**{c_name} ({c_weight}%)**")
+                    # Grading Form
+                    with st.form(f"grade_{s['id']}"):
+                        score = st.number_input("Score", value=st.session_state.get(f"sc_{s['id']}", 0))
+                        fb = st.text_area("Feedback", value=st.session_state.get(f"fb_{s['id']}", ""))
+                        if st.form_submit_button("Submit"):
+                            supabase.table("submissions").update(
+                                {"final_score": score, "feedback": fb, "status": "Graded"}).eq("id", s['id']).execute()
+                            st.success("Saved!")
+                            time.sleep(1)
+                            st.rerun()
 
-                                    subs = cat.get("sub_criteria", [])
-                                    if subs:
-                                        df = pd.DataFrame(subs)
-                                        st.dataframe(df, hide_index=True, use_container_width=True)
-                        else:
-                            if isinstance(rubric, list):
-                                rubric_df = pd.DataFrame(rubric)
-                                st.dataframe(rubric_df, hide_index=True, width='stretch')
-                    else:
-                        st.warning("No rubric defined for this assignment.")
-
-                    st.divider()
-
-                    if s['status'] == "Graded":
-                        st.write(f"**Final Score:** {s.get('final_score')}")
-                        st.write(f"**Feedback:** {s.get('feedback')}")
-                    else:
-                        # AI Analysis Button
-                        if st.button("🤖 Analyze with AI", key=f"ai_{s['id']}"):
-                            with st.spinner("Analyzing project code..."):
-                                try:
-                                    res = requests.post(f"{API_URL}/teacher/analyze_ai", json={
-                                        "project_url": s['link'],
-                                        "rubric_id": s['assignment_id']
-                                    }).json()
-                                    if "error" in res:
-                                        st.error(res["error"])
-                                    else:
-                                        st.session_state[f"score_{s['id']}"] = res["suggested_score"]
-                                        st.session_state[f"feedback_{s['id']}"] = res["suggested_feedback"]
-                                        st.success("AI Analysis Complete!")
-                                except Exception as e:
-                                    st.error(f"AI Error: {e}")
-
-                        with st.form(f"grade_{s['id']}"):
-                            def_score = st.session_state.get(f"score_{s['id']}", 0)
-                            def_fb = st.session_state.get(f"feedback_{s['id']}", "")
-
-                            score = st.number_input("Final Score", 0, 100, value=int(def_score), step=1)
-                            fb = st.text_area("Feedback", value=def_fb, height=150)
-
-                            if st.form_submit_button("Submit Grade"):
-                                supabase.table("submissions").update({
-                                    "final_score": score,
-                                    "feedback": fb,
-                                    "status": "Graded"
-                                }).eq("id", s['id']).execute()
-                                st.success("Graded Successfully!")
-                                time.sleep(1)
-                                st.rerun()
-
+        # TAB 2: MANAGE ASSIGNMENTS
         with tab2:
-            st.subheader("Manage Assignments (Hierarchical Rubric)")
+            st.subheader("Manage Assignments")
+            mode = st.radio("Mode", ["Create New Assignment", "Edit Existing Assignment"], horizontal=True)
 
-            # Mode Selection
-            mode = st.radio("Action", ["Create New Assignment"], horizontal=True)
+            current_rubric_data = [
+                {"name": "Code & Algorithmics", "weight": 40,
+                 "sub_criteria": [{"name": "Dr Scratch Score", "weight": 60},
+                                  {"name": "Amount of Objects", "weight": 40}]},
+                {"name": "Usability", "weight": 20, "sub_criteria": [{"name": "Design & UX", "weight": 100}]},
+                {"name": "Creativity", "weight": 20, "sub_criteria": [{"name": "Innovation", "weight": 100}]},
+                {"name": "Presentation", "weight": 20, "sub_criteria": [{"name": "Documentation", "weight": 100}]}
+            ]
 
-            if mode == "Create New Assignment":
-                title = st.text_input("Assignment Title")
-                cls = st.text_input("Class Name")
+            title_val = ""
+            class_val = ""
+            target_id = None
 
-                st.divider()
-                st.write("### 🏗️ Rubric Structure")
-                st.info("The 4 Main Categories are fixed. You can adjust the weights (must sum to 100%) and the sub-criteria within them.")
+            if mode == "Edit Existing Assignment":
+                assigns = supabase.table("assignments").select("*").execute().data
+                if assigns:
+                    opts = {f"{a['title']} ({a['class_name']})": a for a in assigns}
+                    sel = st.selectbox("Select Assignment", list(opts.keys()))
+                    target_a = opts[sel]
 
-                # Fixed Categories
-                default_cats = [
-                    {"name": "Code & Algorithmics", "weight": 40, "subs": [
-                        {"name": "Dr Scratch Score", "weight": 60},
-                        {"name": "Amount of Objects", "weight": 10},
-                        {"name": "Input Tools", "weight": 10},
-                        {"name": "Events & Messages", "weight": 10},
-                        {"name": "Self Learning", "weight": 10}
-                    ]},
-                    {"name": "Usability", "weight": 10, "subs": [
-                        {"name": "Design & UX", "weight": 50},
-                        {"name": "Multimedia", "weight": 50}
-                    ]},
-                    {"name": "Creativity", "weight": 30, "subs": [
-                        {"name": "Innovation", "weight": 50},
-                        {"name": "Simplicity", "weight": 20},
-                        {"name": "Pedagogical Level", "weight": 30}
-                    ]},
-                    {"name": "Presentation & Other", "weight": 20, "subs": [
-                        {"name": "Documentation", "weight": 50},
-                        {"name": "Oral Presentation", "weight": 50}
-                    ]}
-                ]
+                    title_val = target_a["title"]
+                    class_val = target_a["class_name"]
+                    target_id = target_a["id"]
 
-                final_rubric_structure = []
-                total_main_weight = 0
-
-                cols = st.columns(4)
-                for i in range(4):
-                    with cols[i]:
-                        # Fixed Name Display
-                        cat_name = default_cats[i]["name"]
-                        st.markdown(f"#### {cat_name}")
-
-                        # Editable Weight - Updates on change now
-                        c_weight = st.number_input(f"Weight %", min_value=0, max_value=100, value=default_cats[i]["weight"], key=f"w_{i}")
-                        total_main_weight += c_weight
-
-                        st.caption("Sub-Criteria")
-                        # Editable Sub-Criteria
-                        df_subs = pd.DataFrame(default_cats[i]["subs"])
-                        edited_subs = st.data_editor(df_subs, num_rows="dynamic", key=f"sub_{i}", hide_index=True)
-
-                        sub_sum = edited_subs["weight"].sum()
-                        if sub_sum != 100:
-                            st.error(f"Subs: {sub_sum}%")
-                        else:
-                            st.caption(f"Subs: 100% ✅")
-
-                        final_rubric_structure.append({
-                            "name": cat_name,
-                            "weight": c_weight,
-                            "sub_criteria": edited_subs.to_dict(orient="records")
-                        })
-
-                st.divider()
-                # Validation Logic
-                if total_main_weight != 100:
-                    st.error(f"Total Main Weight is {total_main_weight}%. It must be exactly 100%.")
+                    if isinstance(target_a.get("rubric"), list) and len(target_a["rubric"]) > 0:
+                        current_rubric_data = target_a["rubric"]
                 else:
-                    st.success(f"Total Main Weight: {total_main_weight}% ✅")
+                    st.info("No assignments to edit.")
 
-                # Action Button (Standard Button, not Form Submit)
-                if st.button("Create Assignment"):
-                    if total_main_weight != 100:
-                        st.error("Please fix main category weights before creating.")
+            new_title = st.text_input("Title", value=title_val)
+            new_class = st.text_input("Class", value=class_val)
+
+            st.write("### 🏗️ Rubric Structure")
+            final_rubric = []
+            total_weight = 0
+            all_subs_valid = True
+            cols = st.columns(4)
+
+            for i in range(4):
+                with cols[i]:
+                    if i < len(current_rubric_data) and isinstance(current_rubric_data[i], dict):
+                        cat_data = current_rubric_data[i]
                     else:
-                        supabase.table("assignments").insert({
+                        cat_data = {"name": f"Category {i + 1}", "weight": 0, "sub_criteria": []}
+
+                    cat_name = cat_data.get("name", f"Category {i + 1}")
+                    cat_weight = int(cat_data.get("weight", 0))
+
+                    st.markdown(f"#### {cat_name}")
+                    w = st.number_input(f"Weight %", 0, 100, cat_weight, key=f"w_{i}")
+                    total_weight += w
+
+                    subs = cat_data.get("sub_criteria", [])
+                    if not isinstance(subs, list): subs = []
+                    df = pd.DataFrame(subs)
+                    if "name" not in df.columns or "weight" not in df.columns:
+                        df = pd.DataFrame(columns=["name", "weight"])
+
+                    st.caption("Sub-Criteria")
+                    edited_df = st.data_editor(
+                        df, num_rows="dynamic", key=f"ed_{i}", hide_index=True,
+                        column_config={
+                            "name": st.column_config.TextColumn("Criteria Name", required=True),
+                            "weight": st.column_config.NumberColumn("Weight", min_value=0, max_value=100, required=True)
+                        }
+                    )
+
+                    if "weight" in edited_df.columns:
+                        sub_sum = edited_df["weight"].sum()
+                    else:
+                        sub_sum = 0
+
+                    if sub_sum != 100:
+                        st.error(f"Sum: {sub_sum}%")
+                        all_subs_valid = False
+                    else:
+                        st.success("100% ✅")
+
+                    final_rubric.append({
+                        "name": cat_name,
+                        "weight": w,
+                        "sub_criteria": edited_df.to_dict(orient="records")
+                    })
+
+            st.divider()
+
+            if total_weight != 100:
+                st.error(f"Total Category Weight: {total_weight}% (Must be 100%)")
+                main_valid = False
+            else:
+                st.success(f"Total Category Weight: {total_weight}% ✅")
+                main_valid = True
+
+            btn_text = "Create Assignment" if mode == "Create New Assignment" else "Update Assignment"
+            c_btn1, c_btn2 = st.columns([1, 4])
+            with c_btn1:
+                if st.button(btn_text):
+                    if not main_valid or not all_subs_valid or not new_class.strip():
+                        st.error("Please fix errors above.")
+                    else:
+                        rubric_payload = {
                             "teacher_id": user['id'],
-                            "title": title,
-                            "class_name": cls,
-                            "rubric": final_rubric_structure
-                        }).execute()
-                        st.success(f"Assignment '{title}' created with hierarchical rubric!")
-                        time.sleep(2)
-                        st.rerun()
+                            "title": new_title,
+                            "class_name": new_class.strip(),
+                            "criteria": final_rubric
+                        }
+                        try:
+                            if mode == "Create New Assignment":
+                                res = requests.post(f"{API_URL}/teacher/rubrics", json=rubric_payload)
+                            else:
+                                res = requests.put(f"{API_URL}/teacher/rubrics/{target_id}", json=rubric_payload)
+                            res.raise_for_status()
+                            st.success("Success!")
+                            time.sleep(1.5)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to save: {e}")
+
+            if mode == "Edit Existing Assignment" and target_id:
+                with c_btn2:
+                    if st.button("🗑️ Delete Assignment", type="primary"):
+                        try:
+                            res = requests.delete(f"{API_URL}/teacher/rubrics/{target_id}")
+                            res.raise_for_status()
+                            st.success("Deleted!")
+                            time.sleep(1.5)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to delete: {e}")
+
+    # --- STUDENT DASHBOARD ---
+    elif role == "student":
+        st.title("My Dashboard")
+        student_class = user.get('class_name', '').strip()
+
+        if not student_class:
+            st.warning("⚠️ You do not have a Class Name assigned. You won't see any assignments.")
+
+        assigns = supabase.table("assignments").select("*").eq("class_name", student_class).execute().data
+        subs = supabase.table("submissions").select("*").eq("student_id", user['id']).execute().data
+        sub_map = {s['assignment_id']: s for s in subs}
+
+        if not assigns and student_class:
+            st.info(f"No assignments found for class: '{student_class}'")
+
+        for a in assigns:
+            with st.container(border=True):
+                c1, c2 = st.columns([3, 1])
+                c1.subheader(a['title'])
+                s = sub_map.get(a['id'])
+                if s:
+                    c1.write(f"Status: {s['status']}")
+                    if s['status'] == "Graded":
+                        c2.metric("Score", s['final_score'])
+                        c1.success(s['feedback'])
+                else:
+                    c1.info("Not Submitted")
+                    with c2.popover("Submit"):
+                        l = st.text_input("Link", key=a['id'])
+                        if st.button("Send", key=f"b_{a['id']}"):
+                            requests.post(f"{API_URL}/student/submit",
+                                          json={"student_id": user['id'], "assignment_id": a['id'], "link": l})
+                            st.success("Sent!")
+                            st.rerun()
 
     # --- ADMIN VIEW ---
     elif role == "admin":
-        st.title("System Overview & Statistics")
+        st.title("Admin Overview")
 
+        # 1. Fetch Data
         users_data = supabase.table("users").select("*").execute().data
-        assignments_data = supabase.table("assignments").select("id").execute().data
+        assignments_data = supabase.table("assignments").select("*").execute().data
         submissions_data = supabase.table("submissions").select("*").execute().data
 
-        total_students = len([u for u in users_data if u['role'] == 'student'])
-        total_teachers = len([u for u in users_data if u['role'] == 'teacher'])
-        total_assigns = len(assignments_data)
-        total_submissions = len(submissions_data)
+        # 2. Key Metrics
         graded_count = len([s for s in submissions_data if s['status'] == 'Graded'])
-
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Students", total_students)
-        m2.metric("Teachers", total_teachers)
-        m3.metric("Assignments", total_assigns)
-        m4.metric("Submissions", total_submissions, f"{graded_count} Graded")
+        m1.metric("Students", len([u for u in users_data if u['role'] == 'student']))
+        m2.metric("Teachers", len([u for u in users_data if u['role'] == 'teacher']))
+        m3.metric("Assignments", len(assignments_data) if assignments_data else 0)
+        m4.metric("Submissions", len(submissions_data), f"{graded_count} Graded")
 
         st.divider()
 
-        st.subheader("Add New User")
-        with st.form("add_user_form"):
+        # 3. ADVANCED STATISTICS (NEW)
+        c_chart1, c_chart2 = st.columns(2)
+
+        # Chart 1: Average Grade by Class
+        with c_chart1:
+            st.subheader("📊 Class Performance")
+            if assignments_data and submissions_data:
+                # Map Assignment ID -> Class Name
+                assign_class_map = {a['id']: a['class_name'] for a in assignments_data}
+
+                # Build Data: Class Name -> List of Grades
+                class_grades = {}
+                for s in submissions_data:
+                    aid = s['assignment_id']
+                    if aid in assign_class_map and s.get('final_score') is not None:
+                        cname = assign_class_map[aid]
+                        if cname not in class_grades: class_grades[cname] = []
+                        class_grades[cname].append(s['final_score'])
+
+                # Calculate Averages
+                avg_data = {"Class": [], "Average Score": []}
+                for cname, grades in class_grades.items():
+                    avg_data["Class"].append(cname)
+                    avg_data["Average Score"].append(sum(grades) / len(grades))
+
+                if avg_data["Class"]:
+                    st.bar_chart(pd.DataFrame(avg_data).set_index("Class"))
+                else:
+                    st.info("No graded submissions yet.")
+            else:
+                st.info("Insufficient data.")
+
+        # Chart 2: Status Distribution
+        with c_chart2:
+            st.subheader("🍩 Submission Status")
+            if submissions_data:
+                status_counts = pd.Series([s['status'] for s in submissions_data]).value_counts()
+                st.bar_chart(status_counts)  # Pie chart requires plotly/altair, bar is safer for basic streamlit
+            else:
+                st.info("No submissions.")
+
+        st.divider()
+
+        # 4. Detailed Table
+        st.subheader("📋 Detailed Assignment Stats")
+        if assignments_data:
+            stats_data = []
+            for a in assignments_data:
+                these_subs = [s for s in submissions_data if s['assignment_id'] == a['id']]
+                graded_subs = [s['final_score'] for s in these_subs if s.get('final_score') is not None]
+                avg_grade = sum(graded_subs) / len(graded_subs) if graded_subs else 0
+
+                stats_data.append({
+                    "Class": a['class_name'],
+                    "Assignment": a['title'],
+                    "Submissions": len(these_subs),
+                    "Avg Grade": f"{avg_grade:.1f}"
+                })
+            st.dataframe(pd.DataFrame(stats_data), width='stretch', hide_index=True)
+
+        # 5. Top Students Leaderboard (NEW)
+        with st.expander("🏆 Top Performing Students"):
+            if users_data and submissions_data:
+                # Student ID -> Name
+                student_map = {u['id']: u.get('full_name', u['username']) for u in users_data if u['role'] == 'student'}
+                # Student ID -> Grades List
+                student_grades = {}
+                for s in submissions_data:
+                    sid = s['student_id']
+                    if sid in student_map and s.get('final_score') is not None:
+                        if sid not in student_grades: student_grades[sid] = []
+                        student_grades[sid].append(s['final_score'])
+
+                leaderboard = []
+                for sid, grades in student_grades.items():
+                    leaderboard.append({
+                        "Student": student_map[sid],
+                        "Average Score": sum(grades) / len(grades),
+                        "Projects Completed": len(grades)
+                    })
+
+                if leaderboard:
+                    df_leader = pd.DataFrame(leaderboard).sort_values("Average Score", ascending=False)
+                    st.dataframe(df_leader,  width='stretch', hide_index=True)
+                else:
+                    st.info("No graded students yet.")
+
+        st.divider()
+
+        # 6. User Management
+        st.subheader("Create New User")
+        with st.form("create_user_form"):
             c1, c2 = st.columns(2)
-            new_u = c1.text_input("Username")
-            new_p = c2.text_input("Password", type="password")
-            new_name = c1.text_input("Full Name")
+            new_username = c1.text_input("Username")
+            new_password = c2.text_input("Password", type="password")
+            new_fullname = c1.text_input("Full Name")
             new_role = c2.selectbox("Role", ["student", "teacher", "admin"])
-            new_class = st.text_input("Class Name (for Students)") if new_role == "student" else ""
+            new_class = st.text_input("Class Name") if new_role == "student" else ""
 
             if st.form_submit_button("Create User"):
-                if not new_u or not new_p:
-                    st.error("Username and Password are required.")
-                else:
+                if new_username and new_password:
                     try:
-                        user_data = {
-                            "username": new_u,
-                            "password": new_p,
-                            "full_name": new_name,
-                            "role": new_role,
-                            "class_name": new_class if new_role == "student" else None
+                        user_payload = {
+                            "username": new_username, "password": new_password,
+                            "full_name": new_fullname, "role": new_role,
+                            "class_name": new_class.strip() if new_role == "student" else None
                         }
-                        supabase.table("users").insert(user_data).execute()
-                        st.success(f"User '{new_u}' ({new_role}) created successfully!")
-                        time.sleep(1.5)
+                        supabase.table("users").insert(user_payload).execute()
+                        st.success(f"User '{new_username}' created!")
+                        time.sleep(1)
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error creating user: {e}")
-
-        st.divider()
-        st.subheader("Bulk Upload Users")
-
-        try:
-            template_text = requests.get(f"{API_URL}/admin/users/template").text
-            st.download_button(
-                label="Download CSV Template",
-                data=template_text,
-                file_name="users_template.csv",
-                mime="text/csv"
-            )
-        except Exception as e:
-            st.error("Could not fetch template from server.")
-
-        uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
-
-        if uploaded_file is not None:
-            if st.button("Process Upload"):
-                with st.spinner("Uploading and creating users..."):
-                    try:
-                        res = requests.post(f"{API_URL}/admin/users/upload", files={"file": uploaded_file.getvalue()})
-
-                        if res.status_code == 200:
-                            data = res.json()
-                            st.success(data["message"])
-                            if data.get("errors"):
-                                with st.expander("See Errors"):
-                                    for err in data["errors"]:
-                                        st.write(f"- {err}")
-                            time.sleep(2)
-                            st.rerun()
-                        else:
-                            st.error(f"Upload failed: {res.text}")
-                    except Exception as e:
                         st.error(f"Error: {e}")
-        st.subheader("User Database")
-        st.dataframe(users_data)
+
+        # User Database Table
+        if users_data:
+            df = pd.DataFrame(users_data)
+            cols = ["username", "role", "full_name", "class_name", "password"]
+            st.dataframe(df[[c for c in cols if c in df.columns]], width='stretch', hide_index=True)
