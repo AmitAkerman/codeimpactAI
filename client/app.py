@@ -318,15 +318,48 @@ elif st.session_state.page == "dashboard":
                     if s['status'] == "Graded":
                         c2.metric("Score", s['final_score'])
                         c1.success(s['feedback'])
+                    else:
+                        with c2.popover("Edit Link"):
+                            l_edit = st.text_input("New Link", value=s['link'], key=f"edit_{a['id']}")
+                            if st.button("Update", key=f"update_{a['id']}"):
+                                if not l_edit:
+                                    st.error("Please enter a link.")
+                                elif not l_edit.startswith("https://scratch.mit.edu/projects/"):
+                                    st.error("Link must start with https://scratch.mit.edu/projects/")
+                                else:
+                                    try:
+                                        project_id = l_edit.rstrip("/").split("/")[-1]
+                                        check_resp = requests.get(f"https://api.scratch.mit.edu/projects/{project_id}", timeout=5)
+                                        if check_resp.status_code == 200:
+                                            supabase.table("submissions").update({"link": l_edit}).eq("id", s['id']).execute()
+                                            st.success("Updated!")
+                                            st.rerun()
+                                        else:
+                                            st.error("Project does not exist or is unshared (API Check Failed).")
+                                    except Exception as e:
+                                        st.error(f"Error checking link: {e}")
                 else:
                     c1.info("Not Submitted")
                     with c2.popover("Submit"):
                         l = st.text_input("Link", key=a['id'])
                         if st.button("Send", key=f"b_{a['id']}"):
-                            requests.post(f"{API_URL}/student/submit",
-                                          json={"student_id": user['id'], "assignment_id": a['id'], "link": l})
-                            st.success("Sent!")
-                            st.rerun()
+                            if not l:
+                                st.error("Please enter a link.")
+                            elif not l.startswith("https://scratch.mit.edu/projects/"):
+                                st.error("Link must start with https://scratch.mit.edu/projects/")
+                            else:
+                                try:
+                                    project_id = l.rstrip("/").split("/")[-1]
+                                    check_resp = requests.get(f"https://api.scratch.mit.edu/projects/{project_id}", timeout=5)
+                                    if check_resp.status_code == 200:
+                                        requests.post(f"{API_URL}/student/submit",
+                                                      json={"student_id": user['id'], "assignment_id": a['id'], "link": l})
+                                        st.success("Sent!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Project does not exist or is unshared (API Check Failed).")
+                                except Exception as e:
+                                    st.error(f"Error checking link: {e}")
 
     # --- ADMIN VIEW ---
     elif role == "admin":
