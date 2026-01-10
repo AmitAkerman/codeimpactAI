@@ -2,13 +2,16 @@ import time
 import streamlit as st
 import pandas as pd
 import requests
+import re
+import json
 from supabase import create_client, Client
 
 from api.client import API_URL
+from utils import get_scratch_json_from_url
 
 # --- CONFIGURATION ---
 SUPABASE_URL = "https://hmouoztlgrsotauzohgm.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtb3VvenRsZ3Jzb3RhdXpvaGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMjgwNjUsImV4cCI6MjA3OTkwNDA2NX0.7lICVEIkYaG_629xN_nVPUJspUgkhRswkKJKTF2TNBg"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtb3VvenRsZ3Jzb3RhdXpvaGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMjgwNjUsImV4cCI6MjA3OTkwNDA2NX0.7lICVEIkYaG_629xN_nVPUJspUgkhRswkKJKTF2TNBWITHg"
 
 
 @st.cache_resource
@@ -138,6 +141,10 @@ elif st.session_state.page == "dashboard":
                     if st.button("🤖 Analyze with AI", key=f"ai_{s['id']}"):
                         with st.spinner("Analyzing..."):
                             try:
+                                scratch_data = get_scratch_json_from_url(s['link'])
+                                print("--- Scratch Project Data ---")
+                                print(json.dumps(scratch_data, indent=4, ensure_ascii=False)) 
+                                print("---------------------------")
                                 res = requests.post(f"{API_URL}/teacher/analyze_ai", json={"project_url": s['link'],
                                                                                            "rubric_id": s[
                                                                                                'assignment_id']}).json()
