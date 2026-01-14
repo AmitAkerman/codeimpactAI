@@ -4,3 +4,5 @@ supabase
 pydantic
 python-dotenv
 streamlit
+google-genai
+
