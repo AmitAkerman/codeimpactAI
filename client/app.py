@@ -170,12 +170,20 @@ elif st.session_state.page == "dashboard":
             mode = st.radio("Mode", ["Create New Assignment", "Edit Existing Assignment"], horizontal=True)
 
             current_rubric_data = [
-                {"name": "Code & Algorithmics", "weight": 40,
-                 "sub_criteria": [{"name": "Dr Scratch Score", "weight": 60},
-                                  {"name": "Amount of Objects", "weight": 40}]},
-                {"name": "Usability", "weight": 20, "sub_criteria": [{"name": "Design & UX", "weight": 100}]},
-                {"name": "Creativity", "weight": 20, "sub_criteria": [{"name": "Innovation", "weight": 100}]},
-                {"name": "Presentation", "weight": 20, "sub_criteria": [{"name": "Documentation", "weight": 100}]}
+                {"name": "קוד ואלגוריתמיקה", "weight": 40,
+                 "sub_criteria": [{"name": "Dr Scratch ציון", "weight": 60},
+                                  {"name": "כמות אובייקטים", "weight": 10},
+                                  {"name": "שימוש באמצעי קלט", "weight": 10},
+                                  {"name": "אירועים ומסרים", "weight": 10},
+                                  {"name": "למידה עצמית", "weight": 10}]},
+                {"name": "שימושיות", "weight": 20,
+                 "sub_criteria": [{"name": "עיצוב וחווית המשתמש", "weight": 50},
+                                    {"name": "מולטימדיה", "weight": 50}]},
+                {"name": "יצירתיות", "weight": 20,
+                 "sub_criteria": [{"name": "חדשנות", "weight": 50},
+                                  {"name": "פשטות ומהירות", "weight":20},
+                                  {"name": "רמה פדגוגית", "weight": 30}]},
+                {"name": "הצגה", "weight": 20, "sub_criteria": [{"name": "תיעוד", "weight": 100}]}
             ]
 
             title_val = ""
