@@ -80,26 +80,75 @@ elif st.session_state.page == "login":
     with c2:
         with st.form("login"):
             st.markdown(f"<h3 style='text-align: center;'>{tgt.capitalize()} Login</h3>", unsafe_allow_html=True)
-            u = st.text_input("Username")
-            p = st.text_input("Password", type="password")
+            u = st.text_input("Username").strip()
+            p = st.text_input("Password", type="password").strip()
+
+            # Additional input for students
+            c_name = ""
             if tgt == "student":
-                st.caption("Tip: Your class name is loaded from your profile.")
+                c_name = st.text_input("Class Name").strip()
 
             if st.form_submit_button("Sign In", width='stretch'):
-                res = supabase.table("users").select("*").execute()
-                found_user = None
-                if res.data:
-                    for user in res.data:
-                        if user["username"].strip().lower() == u.strip().lower():
-                            found_user = user
-                            break
-                if found_user and str(found_user["password"]) == p.strip():
-                    st.session_state.auth_user = found_user
-                    navigate("dashboard")
+                if not u or not p:
+                    st.error("Please enter both username and password.")
                 else:
-                    st.error("Invalid Credentials")
-    if st.button("Back"): navigate("home")
+                    # 1. Look for existing user by username
+                    res = supabase.table("users").select("*").eq("username", u).execute()
+                    found_user = res.data[0] if res.data else None
 
+                    if found_user:
+                        # 2. Existing User Logic
+                        if tgt == "student":
+                            # Check if the class matches the one they registered with
+                            if found_user.get("class_name") != c_name:
+                                st.error(
+                                    f"Access Denied: You are registered in class '{found_user.get('class_name')}', not '{c_name}'.")
+                            elif str(found_user["password"]) == p:
+                                st.session_state.auth_user = found_user
+                                navigate("dashboard")
+                            else:
+                                st.error("Invalid Password.")
+                        else:
+                            # Standard login for Teacher/Admin
+                            if str(found_user["password"]) == p:
+                                st.session_state.auth_user = found_user
+                                navigate("dashboard")
+                            else:
+                                st.error("Invalid Password.")
+
+                    elif tgt == "student":
+                        # 3. New Student Auto-Registration Logic
+                        if not c_name:
+                            st.error("Class Name is required for new students.")
+                        else:
+                            # Check if the class exists in the assignments table
+                            class_check = supabase.table("assignments").select("class_name").eq("class_name",
+                                                                                                c_name).execute()
+
+                            if not class_check.data:
+                                st.error(f"Class '{c_name}' does not exist. Please contact your teacher.")
+                            else:
+                                try:
+                                    new_student = {
+                                        "username": u,
+                                        "password": p,
+                                        "role": "student",
+                                        "full_name": u,
+                                        "class_name": c_name
+                                    }
+                                    # Insert and log in
+                                    insert_res = supabase.table("users").insert(new_student).execute()
+                                    if insert_res.data:
+                                        st.success(f"Welcome! Account created for {u} in class {c_name}.")
+                                        st.session_state.auth_user = insert_res.data[0]
+                                        time.sleep(1)
+                                        navigate("dashboard")
+                                except Exception as e:
+                                    st.error(f"Error creating account: {e}")
+                    else:
+                        st.error("User not found.")
+                        
+    if st.button("Back"): navigate("home")
 # ==========================================
 # PAGE: DASHBOARD
 # ==========================================
@@ -548,3 +597,37 @@ elif st.session_state.page == "dashboard":
             df = pd.DataFrame(users_data)
             cols = ["username", "role", "full_name", "class_name", "password"]
             st.dataframe(df[[c for c in cols if c in df.columns]], width='stretch', hide_index=True)
+
+        st.subheader("Bulk Load Teachers")
+        with st.expander("📤 Upload Teachers via CSV"):
+            st.write("Upload a CSV with headers: `username`, `password`, `full_name`")
+            teacher_csv = st.file_uploader("Choose CSV File", type="csv", key="teacher_upload")
+
+            if teacher_csv is not None:
+                if st.button("Process Teacher CSV"):
+                    try:
+                        # Read the CSV locally to iterate and upload to Supabase
+                        df = pd.read_csv(teacher_csv)
+
+                        # Basic validation of columns
+                        required_cols = ['username', 'password']
+                        if not all(col in df.columns for col in required_cols):
+                            st.error(f"CSV must contain at least: {required_cols}")
+                        else:
+                            success_count = 0
+                            for _, row in df.iterrows():
+                                payload = {
+                                    "username": str(row['username']).strip(),
+                                    "password": str(row['password']).strip(),
+                                    "full_name": str(row.get('full_name', '')).strip(),
+                                    "role": "teacher",  # Force the role
+                                    "class_name": None
+                                }
+                                supabase.table("users").insert(payload).execute()
+                                success_count += 1
+
+                            st.success(f"Successfully uploaded {success_count} teachers!")
+                            time.sleep(1)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to process CSV: {e}")

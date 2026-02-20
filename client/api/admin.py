@@ -17,6 +17,8 @@ def upload_users_csv(file_obj):
     # keys matching the FastAPI parameter name 'file'
     return post_file("/admin/users/upload", files={"file": file_obj})
 
+def upload_teachers_csv(file_obj):
+    return post_file("/admin/teachers/upload", files={"file": file_obj})
 
 def get_csv_template():
     # Direct get to return raw text
