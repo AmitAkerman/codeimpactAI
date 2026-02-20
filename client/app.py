@@ -147,7 +147,7 @@ elif st.session_state.page == "login":
                                     st.error(f"Error creating account: {e}")
                     else:
                         st.error("User not found.")
-                        
+
     if st.button("Back"): navigate("home")
 # ==========================================
 # PAGE: DASHBOARD
