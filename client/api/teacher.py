@@ -1,3 +1,5 @@
+from typing import List, Any
+
 from . import client
 from .client import get, post
 
@@ -13,8 +15,8 @@ def create_rubric(teacher_id: int, title: str, criteria: list[dict]):
 def list_student_projects(student_id: int):
     return get(f"/teacher/student/{student_id}/projects")
 
-def analyze_ai(project_url: str, rubric_id: str):
-    return post("/teacher/analyze_ai", {"project_url": project_url, "rubric_id": rubric_id})
+def analyze_ai(project_url: str, rubrics: List[Any]):
+    return post("/teacher/analyze_ai", {"project_url": project_url, "rubrics": rubrics})
 
 def submit_grade(project_id: str, rubric_id: str, total_score: int, feedback: str, details: dict):
     return post("/teacher/grade", {

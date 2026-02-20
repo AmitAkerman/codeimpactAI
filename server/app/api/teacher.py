@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from server.app.models.teacher_model import RubricCreate, AIAnalysisRequest, GradeSubmit
-from server.app.services.teacher_service import (
+from ..models.teacher_model import RubricCreate, AIAnalysisRequest, GradeSubmit
+from ..services.teacher_service import (
     get_students, get_student_projects, create_rubric,
     get_rubrics, analyze_ai, submit_grade, edit_rubric
 )
@@ -26,7 +26,7 @@ def teacher_list_rubrics():
 
 @router.post("/analyze_ai")
 def teacher_ai(req: AIAnalysisRequest):
-    return analyze_ai(req.project_url, req.rubric_id)
+    return analyze_ai(req.project_url, req.rubrics)
 
 @router.post("/grade")
 def teacher_grade(g: GradeSubmit):
