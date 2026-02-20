@@ -128,7 +128,20 @@ elif st.session_state.page == "dashboard":
             if not all_subs:
                 st.info("No submissions yet.")
 
-            for s in all_subs:
+            # Filter Options
+            filtered_subs = all_subs
+            if all_subs:
+                filter_mode = st.radio("Filter By", ["All", "Student", "Assignment"], horizontal=True)
+                if filter_mode == "Student":
+                    student_ids = sorted(list({s['student_id'] for s in all_subs}), key=lambda x: all_users.get(x, "Unknown"))
+                    selected_student = st.selectbox("Select Student", student_ids, format_func=lambda x: all_users.get(x, "Unknown"))
+                    filtered_subs = [s for s in all_subs if s['student_id'] == selected_student]
+                elif filter_mode == "Assignment":
+                    assign_ids = sorted(list({s['assignment_id'] for s in all_subs}), key=lambda x: all_assigns.get(x, {}).get('title', "Unknown"))
+                    selected_assign = st.selectbox("Select Assignment", assign_ids, format_func=lambda x: all_assigns.get(x, {}).get('title', "Unknown"))
+                    filtered_subs = [s for s in all_subs if s['assignment_id'] == selected_assign]
+
+            for s in filtered_subs:
                 # חילוץ שמות לתצוגה
                 s_name = all_users.get(s['student_id'], "Unknown Student")
                 assignment_data = all_assigns.get(s['assignment_id'], {})
