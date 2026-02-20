@@ -2,12 +2,9 @@ import time
 import streamlit as st
 import pandas as pd
 import requests
-import re
-import json
-from supabase import create_client, Client
+from supabase import create_client
 
 from api.client import API_URL
-from utils import get_scratch_json_from_url
 
 # --- CONFIGURATION ---
 SUPABASE_URL = "https://hmouoztlgrsotauzohgm.supabase.co"
@@ -121,6 +118,8 @@ elif st.session_state.page == "dashboard":
         # TAB 1: Grading
         with tab1:
             st.subheader("Student Submissions")
+
+            # משיכת נתונים בסיסיים
             all_subs = supabase.table("submissions").select("*").execute().data
             all_users = {u['id']: u['full_name'] for u in
                          supabase.table("users").select("id, full_name").execute().data}
@@ -129,54 +128,77 @@ elif st.session_state.page == "dashboard":
             if not all_subs:
                 st.info("No submissions yet.")
 
-            # Filter Options
-            filtered_subs = all_subs
-            if all_subs:
-                filter_mode = st.radio("Filter By", ["All", "Student", "Assignment"], horizontal=True)
-                if filter_mode == "Student":
-                    student_ids = sorted(list({s['student_id'] for s in all_subs}), key=lambda x: all_users.get(x, "Unknown"))
-                    selected_student = st.selectbox("Select Student", student_ids, format_func=lambda x: all_users.get(x, "Unknown"))
-                    filtered_subs = [s for s in all_subs if s['student_id'] == selected_student]
-                elif filter_mode == "Assignment":
-                    assign_ids = sorted(list({s['assignment_id'] for s in all_subs}), key=lambda x: all_assigns.get(x, {}).get('title', "Unknown"))
-                    selected_assign = st.selectbox("Select Assignment", assign_ids, format_func=lambda x: all_assigns.get(x, {}).get('title', "Unknown"))
-                    filtered_subs = [s for s in all_subs if s['assignment_id'] == selected_assign]
+            for s in all_subs:
+                # חילוץ שמות לתצוגה
+                s_name = all_users.get(s['student_id'], "Unknown Student")
+                assignment_data = all_assigns.get(s['assignment_id'], {})
+                a_title = assignment_data.get('title', "Unknown Assignment")
 
-            for s in filtered_subs:
-                s_name = all_users.get(s['student_id'], "Unknown")
-                a_title = all_assigns.get(s['assignment_id'], {}).get('title', "Unknown")
+                # הכנת המחוון (Rubric) לשליחה ל-AI
+                # ודאי שהשדה ב-DB נקרא 'criteria' או 'rubric' - עדכני בהתאם
+                rubric_to_send = assignment_data.get("criteria", [])
 
                 with st.expander(f"{s_name} - {a_title}"):
                     st.write(f"Link: {s['link']}")
 
-                    # AI Button
+                    # כפתור הפעלת ה-AI
                     if st.button("🤖 Analyze with AI", key=f"ai_{s['id']}"):
-                        with st.spinner("Analyzing..."):
+                        with st.spinner("Analyzing project with AI & Dr. Scratch..."):
                             try:
-                                scratch_data = get_scratch_json_from_url(s['link'])
-                                print("--- Scratch Project Data ---")
-                                print(json.dumps(scratch_data, indent=4, ensure_ascii=False)) 
-                                print("---------------------------")
-                                res = requests.post(f"{API_URL}/teacher/analyze_ai", json={"project_url": s['link'],
-                                                                                           "rubric_id": s[
-                                                                                               'assignment_id']}).json()
+                                # הכנת גוף הבקשה לפי המודל החדש ב-Backend
+                                payload = {
+                                    "project_url": s['link'],
+                                    "rubrics": rubric_to_send
+                                }
+
+                                # שליחת הבקשה ל-Backend
+                                response = requests.post(f"{API_URL}/teacher/analyze_ai", json=payload)
+                                response.raise_for_status()  # זורק שגיאה אם הסטטוס אינו 200
+                                res = response.json()
+
+                                # שמירת התוצאות ב-Session State כדי שיופיעו בטופס למטה
                                 st.session_state[f"sc_{s['id']}"] = res.get("suggested_score", 0)
                                 st.session_state[f"fb_{s['id']}"] = res.get("suggested_feedback", "")
-                                st.success("Analysis Complete")
+
+                                st.success("Analysis Complete!")
+
+                                # תצוגת המשוב המפורט למורה (Markdown)
+                                st.markdown("### 📝 AI Detailed Feedback")
+                                st.markdown(res.get("suggested_feedback", "No detailed feedback provided."))
+                                st.divider()
+
+                                # הצגת נתוני Dr. Scratch בנפרד אם קיימים
+                                if "raw_dr_scratch" in res:
+                                    with st.expander("Technical Data (Dr. Scratch Details)"):
+                                        st.json(res["raw_dr_scratch"])
+
                             except Exception as e:
-                                st.error(f"Error: {e}")
+                                st.error(f"Error during AI analysis: {e}")
 
-                    # Grading Form
+                    # טופס מתן ציון סופי
                     with st.form(f"grade_{s['id']}"):
-                        score = st.number_input("Score", value=st.session_state.get(f"sc_{s['id']}", 0))
-                        fb = st.text_area("Feedback", value=st.session_state.get(f"fb_{s['id']}", ""))
-                        if st.form_submit_button("Submit"):
-                            supabase.table("submissions").update(
-                                {"final_score": score, "feedback": fb, "status": "Graded"}).eq("id", s['id']).execute()
-                            st.success("Saved!")
-                            time.sleep(1)
-                            st.rerun()
+                        st.write("### Final Grading")
+                        # הציון והמשוב נמשכים מה-session_state אם ה-AI הופעל, או נשארים ריקים
+                        score = st.number_input("Final Score", min_value=0, max_value=100,
+                                                value=int(st.session_state.get(f"sc_{s['id']}", 0)))
 
+                        fb = st.text_area("Final Feedback",
+                                          value=st.session_state.get(f"fb_{s['id']}", ""),
+                                          height=200)
+
+                        if st.form_submit_button("Submit Grade"):
+                            try:
+                                supabase.table("submissions").update({
+                                    "final_score": score,
+                                    "feedback": fb,
+                                    "status": "Graded"
+                                }).eq("id", s['id']).execute()
+
+                                st.success(f"Grade for {s_name} saved successfully!")
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to save grade: {e}")
         # TAB 2: MANAGE ASSIGNMENTS
         with tab2:
             st.subheader("Manage Assignments")
@@ -444,7 +466,7 @@ elif st.session_state.page == "dashboard":
             st.subheader("🍩 Submission Status")
             if submissions_data:
                 status_counts = pd.Series([s['status'] for s in submissions_data]).value_counts()
-                st.bar_chart(status_counts)  # Pie chart requires plotly/altair, bar is safer for basic streamlit
+                st.bar_chart(status_counts)  # Pie chart requires plotly/altair, bar is safer for basic .streamlit
             else:
                 st.info("No submissions.")
 

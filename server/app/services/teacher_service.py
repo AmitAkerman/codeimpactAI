@@ -1,9 +1,14 @@
+import json
 import random
+from typing import List, Any
+
 from fastapi import HTTPException
-from server.app.repositories.projects_repo import list_submissions_by_student, update_submission_grade
-from server.app.repositories.rubrics_repo import insert_assignment, list_all_assignments, get_assignment, \
+from ..repositories.projects_repo import list_submissions_by_student, update_submission_grade
+from ..repositories.rubrics_repo import insert_assignment, list_all_assignments, get_assignment, \
     update_assignment
-from server.app.repositories.users_repo import list_students
+from ..repositories.users_repo import list_students
+from ..services.gemini_client import generate_text
+from ..services.scratch_parser import download_and_parse_scratch
 
 
 def get_students():
@@ -31,67 +36,80 @@ def get_student_projects(student_id: str):
     return submissions
 
 
-def analyze_ai(project_url: str, rubric_id: str):
-    rubric_data = get_assignment(rubric_id)
-    if not rubric_data:
-        raise HTTPException(status_code=404, detail="Rubric not found")
+def analyze_ai(project_url: str, rubrics: List[Any]):
+    """
+    מנתחת פרויקט סקראץ' בעזרת AI על בסיס רשימת רובריקות שנשלחה מהקליאנט.
+    """
+    # 1. עיבוד רשימת הרובריקות שהתקבלה מהבקשה
+    # אנחנו רצים על הרשימה כדי לוודא שכל המידע (שם, משקל ותתי-קריטריונים) עובר
+    formatted_rubric_list = []
+    for category in rubrics:
+        category_info = {
+            "category_name": category.get("name"),
+            "category_weight": category.get("weight"),
+            "sub_criteria": category.get("sub_criteria", []),
+            "description": category.get("description", "")
+        }
+        formatted_rubric_list.append(category_info)
 
-    rubric = rubric_data.get("criteria", [])
+    # 2. נתוני Dr. Scratch - Mock לבדיקות
+    dr_scratch_results = {"score": 14, "mastery": "Medium"}
 
-    # --- UPDATED LOGIC FOR HIERARCHICAL RUBRIC ---
-    ai_results = {}
-    total_score = 0
-    feedback_lines = []
+    # 3. ניתוח קוד ה-Scratch (הורדת ה-JSON)
+    try:
+        project_summary = download_and_parse_scratch(project_url)
+    except Exception as e:
+        project_summary = f"Could not parse blocks. Error: {str(e)}"
 
-    # Check if rubric is nested (New format) or flat (Old format)
-    is_nested = len(rubric) > 0 and "sub_criteria" in rubric[0]
+    # 4. הפיכת המחוון המעובד לטקסט JSON עבור הפרומפט
+    rubric_context = json.dumps(formatted_rubric_list, ensure_ascii=False, indent=2)
 
-    if is_nested:
-        for cat in rubric:
-            cat_name = cat["name"]
-            cat_weight = cat["weight"]
+    # 5. בניית הפרומפט המפורט
+    prompt = f"""
+    עליך לשמש כמעריך פדגוגי מומחה ל-Scratch. 
+    נתח את הפרויקט בכתובת {project_url} על סמך המחוון ההיררכי הבא:
 
-            # Sub-category calculation
-            cat_score_accum = 0
-            sub_feedback = []
+    ### מחוון הערכה (Rubrics):
+    {rubric_context}
 
-            for sub in cat["sub_criteria"]:
-                # AI "grades" the sub-criteria
-                raw_score = random.randint(70, 100)  # Mock AI Logic
+    ### נתוני קוד הפרויקט:
+    {project_summary}
 
-                # Weight within the category (e.g., 50% of the category)
-                sub_weight_val = sub["weight"]
+    ### נתוני Dr. Scratch:
+    {dr_scratch_results}
 
-                # Contribution to category score
-                cat_score_accum += raw_score * (sub_weight_val / 100.0)
+    ### הנחיות מחמירות למשוב:
+    1. עבור כל קטגוריה ברשימה, עליך לנתח כל תת-קריטריון בנפרד.
+    2. לכל קטגוריה, כתוב כותרת ברורה ב-Markdown ולאחריה 2-3 משפטים של נימוק פדגוגי בעברית.
+    3. בנימוק, ציין שמות של דמויות, משתנים או בלוקים ספציפיים שמצאת בקוד.
+    4. בצע שקלול מתמטי מדויק: (ציון תת-קריטריון * משקל פנימי) -> ציון קטגוריה. סכום ציוני הקטגוריות * משקלן -> ציון סופי.
 
-                ai_results[f"{cat_name} > {sub['name']}"] = raw_score
-                sub_feedback.append(f"  - {sub['name']}: {raw_score}/100 (Solid implementation)")
+    ### פורמט פלט נדרש (JSON בלבד):
+    {{
+        "suggested_score": 85,
+        "suggested_feedback": "כאן יופיע הדו"ח המלא והמפורט בעברית עם כותרות לכל קטגוריה",
+        "details": {{ "שם תת-הקריטריון": 85 }}
+    }}
+    """
 
-            # Now add category score to total total
-            # Category score is (cat_score_accum)
-            # Contribution to Global Total is cat_score_accum * (cat_weight / 100)
-
-            total_score += cat_score_accum * (cat_weight / 100.0)
-
-            feedback_lines.append(f"**{cat_name}** (Calc Score: {int(cat_score_accum)})")
-            feedback_lines.extend(sub_feedback)
-
-    else:
-        # FALLBACK: Old Flat Logic
-        for crit in rubric:
-            score = random.randint(70, 100)
-            weighted_score = score * (crit["weight"] / 100)
-            ai_results[crit["name"]] = score
-            total_score += weighted_score
-            feedback_lines.append(f"- **{crit['name']}**: Good implementation.")
-
-    final_feedback = "### AI Assessment Report\n" + "\n".join(feedback_lines)
+    # 6. שליחה ל-AI
+    try:
+        ai_response_raw = generate_text(prompt)
+        clean_json = ai_response_raw.replace("```json", "").replace("```", "").strip()
+        ai_response = json.loads(clean_json)
+    except Exception as e:
+        return {
+            "suggested_score": 0,
+            "suggested_feedback": f"שגיאה בעיבוד ה-AI: {str(e)}",
+            "details": {},
+            "raw_dr_scratch": dr_scratch_results
+        }
 
     return {
-        "suggested_score": int(total_score),
-        "suggested_feedback": final_feedback,
-        "details": ai_results,
+        "suggested_score": ai_response.get("suggested_score", 0),
+        "suggested_feedback": ai_response.get("suggested_feedback", "לא ניתן לייצר משוב"),
+        "details": ai_response.get("details", {}),
+        "raw_dr_scratch": dr_scratch_results
     }
 
 

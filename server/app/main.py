@@ -6,6 +6,11 @@ import random
 from datetime import datetime
 from supabase import create_client, Client
 
+from .services.dr_scratch_service import analyze_with_dr_scratch
+from .api.teacher import router as teacher_router
+
+# from .app.services.dr_scratch_service import analyze_with_dr_scratch
+
 app = FastAPI()
 
 # --- 1. CONFIGURATION ---
@@ -24,6 +29,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- כאן קורה הקסם: חיבור ה-Routers ל-App המרכזי ---
+app.include_router(teacher_router)
+# app.include_router(student_router)
+# app.include_router(admin_router)
 
 # --- 2. DATA MODELS ---
 class LoginRequest(BaseModel):
@@ -196,54 +205,6 @@ def update_rubric(id: str, r: RubricCreate):
     return {"message": "Rubric Updated"}
 
 
-@app.post("/teacher/analyze_ai")
-def analyze_with_ai(req: AIAnalysisRequest):
-    response = supabase.table("assignments").select("*").eq("id", req.rubric_id).execute()
-    if not response.data:
-        return {"error": "Rubric not found"}
-
-    rubric_criteria = response.data[0]["rubric"]
-    ai_results = {}
-    total_score = 0
-    feedback_lines = []
-
-    # Handle Nested (Hierarchical) Rubric
-    is_nested = isinstance(rubric_criteria, list) and len(rubric_criteria) > 0 and "sub_criteria" in rubric_criteria[0]
-
-    if is_nested:
-        for cat in rubric_criteria:
-            cat_score = 0
-            cat_weight = cat.get("weight", 0)
-
-            for sub in cat.get("sub_criteria", []):
-                score = random.randint(70, 100)  # Mock AI Logic
-                sub_weight = sub.get("weight", 0)
-
-                # Contribution to category score
-                cat_score += score * (sub_weight / 100)
-                ai_results[f"{cat['name']} > {sub['name']}"] = score
-
-            # Contribution to total score
-            total_score += cat_score * (cat_weight / 100)
-            feedback_lines.append(f"- **{cat['name']}**: Calculated Score {int(cat_score)}")
-    else:
-        # Fallback for old flat rubrics
-        for crit in rubric_criteria:
-            score = random.randint(70, 100)
-            weighted_score = score * (crit["weight"] / 100)
-            ai_results[crit["name"]] = score
-            total_score += weighted_score
-            feedback_lines.append(f"- **{crit['name']}**: Good implementation.")
-
-    final_feedback = "### AI Assessment:\n" + "\n".join(feedback_lines)
-
-    return {
-        "suggested_score": int(total_score),
-        "suggested_feedback": final_feedback,
-        "details": ai_results
-    }
-
-
 @app.post("/teacher/grade")
 def submit_final_grade(g: GradeSubmit):
     data = {
@@ -303,3 +264,25 @@ def get_stats():
         "graded": graded.count,
         "teachers": len([u for u in users if u["role"] == "teacher"])
     }
+
+
+from pydantic import BaseModel
+
+# הגדרת המבנה שה-API מצפה לקבל ב-JSON
+class DrScratchRequest(BaseModel):
+    project_url: str
+
+@app.post("/test_dr_scratch")
+def test_dr_scratch(req: DrScratchRequest): # שימוש במודל כאן
+    """
+    Endpoint לבדיקת החיבור ל-Dr. Scratch באופן עצמאי דרך POST
+    """
+    # שליפת ה-URL מתוך האובייקט
+    result = analyze_with_dr_scratch(req.project_url)
+
+    if "error" in result:
+        # כאן כדאי להחזיר את ה-Mock אם את רוצה שהבדיקה תעבור גם כש-Dr. Scratch למטה
+        # return {"score": 14, "mastery": "Medium", "note": "Dr. Scratch Error - Fallback to Mock"}
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return result
