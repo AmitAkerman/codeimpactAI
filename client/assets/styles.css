@@ -1,0 +1,43 @@
+/* RTL + יישור לימין לכל האפליקציה */
+html, body, [class*="stApp"] {
+  direction: rtl;
+  text-align: right;
+}
+
+/* כותרות ופסקאות */
+h1, h2, h3, h4, h5, h6, p, label, div, span {
+  direction: rtl;
+  text-align: right;
+}
+
+/* צד-בר */
+section[data-testid="stSidebar"] * {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Role cards (מה שהיה לך) */
+.role-card {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  text-align: center;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.role-card:hover {
+  border-color: #4CAF50;
+  transform: translateY(-3px);
+}
+
+/* שיפור קל: כפתורים וכותרות בטפסים */
+button, input, textarea {
+  direction: rtl;
+}
