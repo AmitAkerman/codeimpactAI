@@ -156,7 +156,7 @@ elif st.session_state.page == "dashboard":
 
                     # כפתור הפעלת ה-AI
                     if st.button("🤖 Analyze with AI", key=f"ai_{s['id']}"):
-                        with st.spinner("Analyzing project with AI & Dr. Scratch..."):
+                        with st.spinner("Analyzing project with AI..."):
                             try:
                                 # הכנת גוף הבקשה לפי המודל החדש ב-Backend
                                 payload = {
