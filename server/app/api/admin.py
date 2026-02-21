@@ -35,21 +35,20 @@ def admin_create_user(u: UserCreate):
 
 from fastapi import HTTPException, UploadFile, File
 from fastapi.responses import PlainTextResponse
-from server.app.services.admin_service import stats, users, add_user, bulk_add_users_from_csv
+from server.app.services.admin_service import stats, users, add_user, \
+    bulk_add_teachers_from_csv
 
 
-@router.post("/users/upload")
-async def upload_users_csv(file: UploadFile = File(...)):
+@router.post("/teachers/upload")
+async def upload_teachers_csv(file: UploadFile = File(...)):
     try:
-        # Read the file content
         content = await file.read()
         csv_str = content.decode("utf-8")
-
-        result = bulk_add_users_from_csv(csv_str)
+        # Call the new service function
+        result = bulk_add_teachers_from_csv(csv_str)
         return result
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error processing CSV: {str(e)}")
-
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/users/template", response_class=PlainTextResponse)
 def get_users_template():
