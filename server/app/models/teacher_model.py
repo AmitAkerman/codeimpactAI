@@ -1,7 +1,7 @@
 
 
 
-from typing import Any
+from typing import Any, List
 
 from pydantic import BaseModel
 
@@ -15,8 +15,7 @@ class RubricCreate(BaseModel):
 
 class AIAnalysisRequest(BaseModel):
     project_url: str
-    rubric_id: str
-
+    rubrics: List[Any]
 
 class GradeSubmit(BaseModel):
     project_id: str
