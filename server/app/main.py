@@ -3,10 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import random
+import requests
 from datetime import datetime
 from supabase import create_client, Client
 
 from .services.dr_scratch_service import analyze_with_dr_scratch
+from .services.scratch_parser import download_and_parse_scratch
 from .api.teacher import router as teacher_router
 
 # from .app.services.dr_scratch_service import analyze_with_dr_scratch
@@ -272,17 +274,36 @@ from pydantic import BaseModel
 class DrScratchRequest(BaseModel):
     project_url: str
 
-@app.post("/test_dr_scratch")
-def test_dr_scratch(req: DrScratchRequest): # שימוש במודל כאן
-    """
-    Endpoint לבדיקת החיבור ל-Dr. Scratch באופן עצמאי דרך POST
-    """
-    # שליפת ה-URL מתוך האובייקט
-    result = analyze_with_dr_scratch(req.project_url)
 
-    if "error" in result:
-        # כאן כדאי להחזיר את ה-Mock אם את רוצה שהבדיקה תעבור גם כש-Dr. Scratch למטה
-        # return {"score": 14, "mastery": "Medium", "note": "Dr. Scratch Error - Fallback to Mock"}
+def get_project_token(project_id):
+    api_url = f"https://api.scratch.mit.edu/projects/{project_id}"
+    res = requests.get(api_url)
+    if res.status_code == 200:
+        return res.json().get('project_token')
+    return None
+
+
+@app.get("/test_dr_scratch/{project_id}")
+def test_dr_scratch(project_id: str, token: str = None):
+    """
+    Endpoint לבדיקת החיבור ל-Dr. Scratch
+    """
+
+    # 1. אם לא נשלח טוקן ידנית ב-URL, ננסה לחלץ אותו אוטומטית
+    if not token:
+        # כאן את משתמשת בפונקציה שמוציאה את הטוקן מה-API של Scratch
+        # (נניח שקראת לה get_project_token או get_user_token)
+        token = get_project_token(project_id)
+        print(f"DEBUG: Automatically fetched token: {token}")
+
+    # 2. כעת מריצים את הניתוח עם הטוקן שיש לנו (או None אם הכל נכשל)
+    result = download_and_parse_scratch(project_id, token)
+
+    # 3. טיפול בשגיאות
+    # מכיוון שהפונקציה החדשה מחזירה Dictionary, הבדיקה היא לפי מפתח "error"
+    if isinstance(result, dict) and "error" in result:
+        # במקום לקרוס, אפשר להחזיר Mock למטרות טסטים
+        # return {"score": 14, "mastery": "Medium", "note": "Fallback to Mock due to error"}
         raise HTTPException(status_code=400, detail=result["error"])
 
     return result

@@ -2,50 +2,84 @@ import requests
 import re
 import json
 
+import requests
+import re
+import json
 
-def download_and_parse_scratch(url: str):
+
+def download_and_parse_scratch(url: str, token: str = None):
     """
-    מורידה את קובץ ה-project.json של פרויקט Scratch ומחזירה סיכום של המבנה והבלוקים.
+    1. מחלצת Project ID.
+    2. משיגה Project Token (אם חסר).
+    3. מורידה את ה-JSON משרתי ה-Assets.
+    4. מנתחת ומחזירה סיכום מובנה.
     """
     # 1. חילוץ ה-Project ID מה-URL
     project_id_match = re.search(r'projects/(\d+)', url)
     if not project_id_match:
-        return "Error: Invalid Scratch URL"
+        # במקרה שהמשתמש שלח רק את ה-ID כמחרוזת
+        project_id = url if url.isdigit() else None
+        if not project_id:
+            return {"error": "Invalid Scratch URL or ID"}
+    else:
+        project_id = project_id_match.group(1)
 
-    project_id = project_id_match.group(1)
+    # 2. השגת Token אוטומטית מ-api.scratch.mit.edu
+    if not token:
+        try:
+            meta_url = f"https://api.scratch.mit.edu/projects/{project_id}"
+            meta_res = requests.get(meta_url, timeout=5)
+            if meta_res.status_code == 200:
+                token = meta_res.json().get('project_token')
+                print(f"DEBUG: Successfully fetched token: {token[:10]}...")
+        except Exception as e:
+            print(f"DEBUG: Token fetch failed: {e}")
 
-    # 2. הכתובת להורדת ה-JSON של הבלוקים (Assets API)
-    # שימי לב: זו כתובת שונה מה-API של המטא-דאטה
+    # 3. פנייה ל-Assets API (projects.scratch.mit.edu)
     assets_url = f"https://projects.scratch.mit.edu/{project_id}"
+    params = {"token": token} if token else {}
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Referer": "https://scratch.mit.edu/"
+    }
 
     try:
-        response = requests.get(assets_url, timeout=10)
+        response = requests.get(assets_url, headers=headers, params=params, timeout=10)
+
+        if response.status_code == 403:
+            return {"error": "Error 403: Forbidden. Project might be unshared or token invalid."}
         if response.status_code != 200:
-            return f"Error: Could not retrieve project JSON (Status: {response.status_code})"
+            return {"error": f"Failed to download project. Status: {response.status_code}"}
 
         project_data = response.json()
 
-        # 3. ניתוח וסיכום הנתונים עבור ה-AI
+        # 4. ניתוח הנתונים (Parsing) לפי המבנה ששלחת
         summary = {
+            "project_id": project_id,
             "total_sprites": len(project_data.get('targets', [])),
             "sprites_details": []
         }
 
         for target in project_data.get('targets', []):
             blocks = target.get('blocks', {})
-            # ספירת סוגי בלוקים מעניינים (לולאות, משתנים, מסרים)
+
+            # חילוץ ה-Opcodes מתוך אובייקט הבלוקים
+            # אנחנו בודקים ש-b הוא dict כי לפעמים יש שם רשימות (shadow blocks)
             opcodes = [b.get('opcode') for b in blocks.values() if isinstance(b, dict)]
 
             sprite_info = {
                 "name": target.get('name'),
-                "block_count": len(blocks),
-                "unique_logic": list(set(opcodes))[:15],  # לוקחים רק דוגמה מהלוגיקה
+                "role": "Stage" if target.get('isStage') else "Sprite",
+                "block_count": len([b for b in blocks.values() if isinstance(b, dict)]),
+                "logic_summary": list(set(opcodes))[:15],  # 15 דוגמאות ללוגיקה ייחודית
                 "variables": list(target.get('variables', {}).keys()),
-                "broadcast_messages": list(target.get('broadcasts', {}).values()) if 'broadcasts' in target else []
+                "broadcast_messages": list(target.get('broadcasts', {}).values())
             }
             summary["sprites_details"].append(sprite_info)
 
-        return json.dumps(summary, ensure_ascii=False, indent=2)
+        return summary
 
     except Exception as e:
-        return f"Error during parsing: {str(e)}"
+        return {"error": f"Parsing failed: {str(e)}"}
