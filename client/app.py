@@ -3,130 +3,176 @@ import streamlit as st
 import pandas as pd
 import requests
 from supabase import create_client
+from pathlib import Path
 
 from api.client import API_URL
 
-# --- CONFIGURATION ---
+# ============================================================
+# CONFIGURATION
+# מומלץ לשים מפתחות ב-.streamlit/secrets.toml ולא בקוד
+# ============================================================
 SUPABASE_URL = "https://hmouoztlgrsotauzohgm.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtb3VvenRsZ3Jzb3RhdXpvaGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMjgwNjUsImV4cCI6MjA3OTkwNDA2NX0.7lICVEIkYaG_629xN_nVPUJspUgkhRswkKJKTF2TNBg"
+
+# ============================================================
+# UI TEXT (עברית בלבד) + מיפויים לערכי DB באנגלית
+# ============================================================
+ROLE_HE = {"student": "תלמיד/ה", "teacher": "מורה", "admin": "מנהל/ת"}
+
+STATUS_HE = {
+    "Graded": "נבדק",
+    "Submitted": "הוגש",
+    "Pending": "ממתין",
+}
+
+FILTER_MODE_HE = {
+    "All": "הכל",
+    "Student": "תלמיד/ה",
+    "Assignment": "מטלה",
+}
+
+MODE_HE = {
+    "Create New Assignment": "יצירת מטלה חדשה",
+    "Edit Existing Assignment": "עריכת מטלה קיימת",
+}
+
+def he_role(role: str) -> str:
+    return ROLE_HE.get(role, role)
+
+def he_status(status: str) -> str:
+    return STATUS_HE.get(status, status)
+
+# ============================================================
+# HELPERS
+# ============================================================
+def load_css():
+    css_path = Path(__file__).parent / "assets" / "styles.css"
+    if css_path.exists():
+        st.markdown(f"<style>{css_path.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+    else:
+        st.warning(f"⚠️ לא נמצא קובץ CSS: {css_path}")
 
 @st.cache_resource
 def init_supabase():
     try:
         return create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
-        st.error(f"Failed to connect to Database: {e}")
+        st.error(f"❌ נכשל החיבור למסד הנתונים: {e}")
         return None
 
-
-supabase = init_supabase()
-st.set_page_config(page_title="CodeImpact AI", page_icon="🎓", layout="wide")
-
-st.markdown("""
-<style>
-    .role-card {
-        background: white; padding: 20px; border-radius: 10px; border: 1px solid #ddd;
-        text-align: center; height: 200px; display: flex; flex-direction: column;
-        justify-content: center; align-items: center; cursor: pointer;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    .role-card:hover { border-color: #4CAF50; transform: translateY(-3px); }
-</style>
-""", unsafe_allow_html=True)
-
-if "page" not in st.session_state: st.session_state.page = "home"
-if "auth_user" not in st.session_state: st.session_state.auth_user = None
-
-
-def navigate(page):
+def navigate(page: str):
     st.session_state.page = page
     st.rerun()
-
 
 def logout():
     st.session_state.auth_user = None
     navigate("home")
 
+# ============================================================
+# APP INIT
+# ============================================================
+supabase = init_supabase()
+st.set_page_config(page_title="CodeImpact AI", page_icon="🎓", layout="wide")
+load_css()
 
-# ==========================================
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+if "auth_user" not in st.session_state:
+    st.session_state.auth_user = None
+if "target" not in st.session_state:
+    st.session_state.target = None
+
+# ============================================================
 # PAGE: HOME
-# ==========================================
+# ============================================================
 if st.session_state.page == "home":
     st.markdown("<h1 style='text-align: center;'>CodeImpact AI 🚀</h1>", unsafe_allow_html=True)
     st.divider()
+
     c1, c2, c3 = st.columns(3)
+
     with c1:
-        st.markdown("""<div class="role-card"><h1>👨‍🎓</h1><h3>Student</h3></div>""", unsafe_allow_html=True)
-        if st.button("Student Login", width='stretch'):
+        st.markdown("""<div class="role-card"><h1>👨‍🎓</h1><h3>תלמיד/ה</h3></div>""", unsafe_allow_html=True)
+        if st.button("התחברות תלמיד/ה", width='stretch'):
             st.session_state.target = "student"
             navigate("login")
+
     with c2:
-        st.markdown("""<div class="role-card"><h1>🏫</h1><h3>Teacher</h3></div>""", unsafe_allow_html=True)
-        if st.button("Teacher Login", width='stretch'):
+        st.markdown("""<div class="role-card"><h1>🏫</h1><h3>מורה</h3></div>""", unsafe_allow_html=True)
+        if st.button("התחברות מורה", width='stretch'):
             st.session_state.target = "teacher"
             navigate("login")
+
     with c3:
-        st.markdown("""<div class="role-card"><h1>🛡️</h1><h3>Admin</h3></div>""", unsafe_allow_html=True)
-        if st.button("Admin Login", width='stretch'):
+        st.markdown("""<div class="role-card"><h1>🛡️</h1><h3>מנהל/ת</h3></div>""", unsafe_allow_html=True)
+        if st.button("התחברות מנהל/ת", width='stretch'):
             st.session_state.target = "admin"
             navigate("login")
 
-# ==========================================
+# ============================================================
 # PAGE: LOGIN
-# ==========================================
+# ============================================================
 elif st.session_state.page == "login":
     tgt = st.session_state.target
+
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         with st.form("login"):
-            st.markdown(f"<h3 style='text-align: center;'>{tgt.capitalize()} Login</h3>", unsafe_allow_html=True)
-            u = st.text_input("Username").strip()
-            p = st.text_input("Password", type="password").strip()
+            st.markdown(
+                f"<h3 style='text-align: center;'>התחברות {he_role(tgt)}</h3>",
+                unsafe_allow_html=True
+            )
 
-            # Additional input for students
+            u = st.text_input("שם משתמש").strip()
+            p = st.text_input("סיסמה", type="password").strip()
+
+            # בקוד האנגלי היה תלמיד עם הזנת כיתה בלוגין
             c_name = ""
             if tgt == "student":
-                c_name = st.text_input("Class Name").strip()
+                c_name = st.text_input("שם כיתה").strip()
+                st.caption("טיפ: אם אין לך משתמש, החשבון ייווצר אוטומטית אם הכיתה קיימת.")
 
-            if st.form_submit_button("Sign In", width='stretch'):
-                if not u or not p:
-                    st.error("Please enter both username and password.")
+            submitted = st.form_submit_button("כניסה", width='stretch')
+
+            if submitted:
+                if supabase is None:
+                    st.error("❌ אין חיבור ל-Supabase.")
+                elif not u or not p:
+                    st.error("אנא הזן/י שם משתמש וסיסמה.")
                 else:
-                    # 1. Look for existing user by username
+                    # חיפוש משתמש קיים לפי username (יותר יעיל מאשר select all)
                     res = supabase.table("users").select("*").eq("username", u).execute()
                     found_user = res.data[0] if res.data else None
 
                     if found_user:
-                        # 2. Existing User Logic
+                        # משתמש קיים
                         if tgt == "student":
-                            # Check if the class matches the one they registered with
+                            # בדיקת התאמת כיתה
                             if found_user.get("class_name") != c_name:
                                 st.error(
-                                    f"Access Denied: You are registered in class '{found_user.get('class_name')}', not '{c_name}'.")
-                            elif str(found_user["password"]) == p:
+                                    f"⛔ אין הרשאה: אתה רשום/ה לכיתה '{found_user.get('class_name')}', לא '{c_name}'."
+                                )
+                            elif str(found_user.get("password", "")) == p:
                                 st.session_state.auth_user = found_user
                                 navigate("dashboard")
                             else:
-                                st.error("Invalid Password.")
+                                st.error("סיסמה שגויה.")
                         else:
-                            # Standard login for Teacher/Admin
-                            if str(found_user["password"]) == p:
+                            # מורה/מנהל - לוגין רגיל
+                            if str(found_user.get("password", "")) == p:
                                 st.session_state.auth_user = found_user
                                 navigate("dashboard")
                             else:
-                                st.error("Invalid Password.")
+                                st.error("סיסמה שגויה.")
 
                     elif tgt == "student":
-                        # 3. New Student Auto-Registration Logic
+                        # רישום אוטומטי לתלמיד חדש (מהקוד האנגלי)
                         if not c_name:
-                            st.error("Class Name is required for new students.")
+                            st.error("שם כיתה הוא חובה לתלמיד חדש.")
                         else:
-                            # Check if the class exists in the assignments table
-                            class_check = supabase.table("assignments").select("class_name").eq("class_name",
-                                                                                                c_name).execute()
-
+                            class_check = supabase.table("assignments").select("class_name").eq("class_name", c_name).execute()
                             if not class_check.data:
-                                st.error(f"Class '{c_name}' does not exist. Please contact your teacher.")
+                                st.error(f"הכיתה '{c_name}' לא קיימת. פנה/י למורה.")
                             else:
                                 try:
                                     new_student = {
@@ -136,149 +182,186 @@ elif st.session_state.page == "login":
                                         "full_name": u,
                                         "class_name": c_name
                                     }
-                                    # Insert and log in
                                     insert_res = supabase.table("users").insert(new_student).execute()
                                     if insert_res.data:
-                                        st.success(f"Welcome! Account created for {u} in class {c_name}.")
+                                        st.success(f"ברוך/ה הבא/ה! נוצר חשבון עבור {u} בכיתה {c_name}.")
                                         st.session_state.auth_user = insert_res.data[0]
                                         time.sleep(1)
                                         navigate("dashboard")
+                                    else:
+                                        st.error("נכשלה יצירת משתמש (לא הוחזרו נתונים).")
                                 except Exception as e:
-                                    st.error(f"Error creating account: {e}")
+                                    st.error(f"❌ שגיאה ביצירת חשבון: {e}")
                     else:
-                        st.error("User not found.")
+                        st.error("משתמש לא נמצא.")
 
-    if st.button("Back"): navigate("home")
-# ==========================================
+    if st.button("חזרה"):
+        navigate("home")
+
+# ============================================================
 # PAGE: DASHBOARD
-# ==========================================
+# ============================================================
 elif st.session_state.page == "dashboard":
     user = st.session_state.auth_user
+    if not user:
+        navigate("home")
+
     role = user["role"]
 
     st.sidebar.title(f"👤 {user.get('full_name', user['username'])}")
-    if st.sidebar.button("Logout"): logout()
+    if st.sidebar.button("התנתקות"):
+        logout()
 
-    # --- TEACHER DASHBOARD ---
+    # ========================================================
+    # TEACHER DASHBOARD
+    # ========================================================
     if role == "teacher":
-        st.title("Teacher Dashboard")
-        tab1, tab2 = st.tabs(["Grading", "Manage Assignments"])
+        st.title("לוח מורה")
+        tab1, tab2 = st.tabs(["בדיקת עבודות", "ניהול מטלות"])
 
-        # TAB 1: Grading
+        # ----------------------------
+        # TAB 1: GRADING
+        # ----------------------------
         with tab1:
-            st.subheader("Student Submissions")
+            st.subheader("הגשות תלמידים")
 
-            # משיכת נתונים בסיסיים
             all_subs = supabase.table("submissions").select("*").execute().data
-            all_users = {u['id']: u['full_name'] for u in
-                         supabase.table("users").select("id, full_name").execute().data}
-            all_assigns = {a['id']: a for a in supabase.table("assignments").select("*").execute().data}
+            all_users = {u["id"]: u.get("full_name", u.get("username", "לא ידוע/ה"))
+                         for u in supabase.table("users").select("id, full_name, username").execute().data}
+            all_assigns = {a["id"]: a for a in supabase.table("assignments").select("*").execute().data}
 
             if not all_subs:
-                st.info("No submissions yet.")
+                st.info("אין עדיין הגשות.")
 
-            # Filter Options
             filtered_subs = all_subs
+
             if all_subs:
-                filter_mode = st.radio("Filter By", ["All", "Student", "Assignment"], horizontal=True)
-                if filter_mode == "Student":
-                    student_ids = sorted(list({s['student_id'] for s in all_subs}), key=lambda x: all_users.get(x, "Unknown"))
-                    selected_student = st.selectbox("Select Student", student_ids, format_func=lambda x: all_users.get(x, "Unknown"))
-                    filtered_subs = [s for s in all_subs if s['student_id'] == selected_student]
-                elif filter_mode == "Assignment":
-                    assign_ids = sorted(list({s['assignment_id'] for s in all_subs}), key=lambda x: all_assigns.get(x, {}).get('title', "Unknown"))
-                    selected_assign = st.selectbox("Select Assignment", assign_ids, format_func=lambda x: all_assigns.get(x, {}).get('title', "Unknown"))
-                    filtered_subs = [s for s in all_subs if s['assignment_id'] == selected_assign]
+                filter_mode_en = st.radio(
+                    "סינון לפי",
+                    ["All", "Student", "Assignment"],
+                    horizontal=True,
+                    format_func=lambda x: FILTER_MODE_HE.get(x, x)
+                )
+
+                if filter_mode_en == "Student":
+                    student_ids = sorted(
+                        list({s["student_id"] for s in all_subs}),
+                        key=lambda x: all_users.get(x, "לא ידוע/ה")
+                    )
+                    selected_student = st.selectbox(
+                        "בחר/י תלמיד/ה",
+                        student_ids,
+                        format_func=lambda x: all_users.get(x, "לא ידוע/ה")
+                    )
+                    filtered_subs = [s for s in all_subs if s["student_id"] == selected_student]
+
+                elif filter_mode_en == "Assignment":
+                    assign_ids = sorted(
+                        list({s["assignment_id"] for s in all_subs}),
+                        key=lambda x: all_assigns.get(x, {}).get("title", "מטלה לא ידועה")
+                    )
+                    selected_assign = st.selectbox(
+                        "בחר/י מטלה",
+                        assign_ids,
+                        format_func=lambda x: all_assigns.get(x, {}).get("title", "מטלה לא ידועה")
+                    )
+                    filtered_subs = [s for s in all_subs if s["assignment_id"] == selected_assign]
 
             for s in filtered_subs:
-                # חילוץ שמות לתצוגה
-                s_name = all_users.get(s['student_id'], "Unknown Student")
-                assignment_data = all_assigns.get(s['assignment_id'], {})
-                a_title = assignment_data.get('title', "Unknown Assignment")
+                s_name = all_users.get(s["student_id"], "תלמיד/ה לא ידוע/ה")
+                assignment_data = all_assigns.get(s["assignment_id"], {})
+                a_title = assignment_data.get("title", "מטלה לא ידועה")
 
-                # הכנת המחוון (Rubric) לשליחה ל-AI
-                # ודאי שהשדה ב-DB נקרא 'criteria' או 'rubric' - עדכני בהתאם
+                # חשוב: לא לשנות keys שהשרת מצפה להם.
                 rubric_to_send = assignment_data.get("criteria", [])
 
                 with st.expander(f"{s_name} - {a_title}"):
-                    st.write(f"Link: {s['link']}")
+                    st.write(f"קישור: {s['link']}")
 
-                    # כפתור הפעלת ה-AI
-                    if st.button("🤖 Analyze with AI", key=f"ai_{s['id']}"):
-                        with st.spinner("Analyzing project with AI..."):
+                    if st.button("🤖 ניתוח עם AI", key=f"ai_{s['id']}"):
+                        with st.spinner("מנתח פרויקט עם AI ו-Dr. Scratch..."):
                             try:
-                                # הכנת גוף הבקשה לפי המודל החדש ב-Backend
                                 payload = {
-                                    "project_url": s['link'],
+                                    "project_url": s["link"],
                                     "rubrics": rubric_to_send
                                 }
-
-                                # שליחת הבקשה ל-Backend
-                                response = requests.post(f"{API_URL}/teacher/analyze_ai", json=payload)
-                                response.raise_for_status()  # זורק שגיאה אם הסטטוס אינו 200
+                                response = requests.post(f"{API_URL}/teacher/analyze_ai", json=payload, timeout=120)
+                                response.raise_for_status()
                                 res = response.json()
 
-                                # שמירת התוצאות ב-Session State כדי שיופיעו בטופס למטה
                                 st.session_state[f"sc_{s['id']}"] = res.get("suggested_score", 0)
                                 st.session_state[f"fb_{s['id']}"] = res.get("suggested_feedback", "")
 
-                                st.success("Analysis Complete!")
+                                st.success("הניתוח הושלם ✅")
 
-                                # תצוגת המשוב המפורט למורה (Markdown)
-                                st.markdown("### 📝 AI Detailed Feedback")
-                                st.markdown(res.get("suggested_feedback", "No detailed feedback provided."))
+                                st.markdown("### 📝 משוב מפורט מה-AI")
+                                st.markdown(res.get("suggested_feedback", "לא התקבל משוב מפורט."))
                                 st.divider()
 
-                                # הצגת נתוני Dr. Scratch בנפרד אם קיימים
                                 if "raw_dr_scratch" in res:
-                                    with st.expander("Technical Data (Dr. Scratch Details)"):
+                                    with st.expander("נתונים טכניים (פרטי Dr. Scratch)"):
                                         st.json(res["raw_dr_scratch"])
 
                             except Exception as e:
-                                st.error(f"Error during AI analysis: {e}")
+                                st.error(f"❌ שגיאה במהלך ניתוח AI: {e}")
 
-                    # טופס מתן ציון סופי
                     with st.form(f"grade_{s['id']}"):
-                        st.write("### Final Grading")
-                        # הציון והמשוב נמשכים מה-session_state אם ה-AI הופעל, או נשארים ריקים
-                        score = st.number_input("Final Score", min_value=0, max_value=100,
-                                                value=int(st.session_state.get(f"sc_{s['id']}", 0)))
+                        st.write("### ציון סופי")
 
-                        fb = st.text_area("Final Feedback",
-                                          value=st.session_state.get(f"fb_{s['id']}", ""),
-                                          height=200)
+                        score = st.number_input(
+                            "ציון סופי (0–100)",
+                            min_value=0,
+                            max_value=100,
+                            value=int(st.session_state.get(f"sc_{s['id']}", 0))
+                        )
 
-                        if st.form_submit_button("Submit Grade"):
+                        fb = st.text_area(
+                            "משוב סופי",
+                            value=st.session_state.get(f"fb_{s['id']}", ""),
+                            height=200
+                        )
+
+                        if st.form_submit_button("שמירת ציון"):
                             try:
                                 supabase.table("submissions").update({
                                     "final_score": score,
                                     "feedback": fb,
-                                    "status": "Graded"
-                                }).eq("id", s['id']).execute()
+                                    "status": "Graded"  # חשוב: להשאיר באנגלית ב-DB
+                                }).eq("id", s["id"]).execute()
 
-                                st.success(f"Grade for {s_name} saved successfully!")
+                                st.success(f"הציון עבור {s_name} נשמר ✅")
                                 time.sleep(1)
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Failed to save grade: {e}")
-        # TAB 2: MANAGE ASSIGNMENTS
-        with tab2:
-            st.subheader("Manage Assignments")
-            mode = st.radio("Mode", ["Create New Assignment", "Edit Existing Assignment"], horizontal=True)
+                                st.error(f"❌ שמירה נכשלה: {e}")
 
+        # ----------------------------
+        # TAB 2: MANAGE ASSIGNMENTS
+        # ----------------------------
+        with tab2:
+            st.subheader("ניהול מטלות")
+
+            mode_en = st.radio(
+                "מצב",
+                ["Create New Assignment", "Edit Existing Assignment"],
+                horizontal=True,
+                format_func=lambda x: MODE_HE.get(x, x)
+            )
+
+            # תבנית ברירת מחדל למחוון
             current_rubric_data = [
                 {"name": "קוד ואלגוריתמיקה", "weight": 40,
-                 "sub_criteria": [{"name": "Dr Scratch ציון", "weight": 60},
+                 "sub_criteria": [{"name": "ציון DR Scratch", "weight": 60},
                                   {"name": "כמות אובייקטים", "weight": 10},
                                   {"name": "שימוש באמצעי קלט", "weight": 10},
                                   {"name": "אירועים ומסרים", "weight": 10},
                                   {"name": "למידה עצמית", "weight": 10}]},
                 {"name": "שימושיות", "weight": 20,
                  "sub_criteria": [{"name": "עיצוב וחווית המשתמש", "weight": 50},
-                                    {"name": "מולטימדיה", "weight": 50}]},
+                                  {"name": "מולטימדיה", "weight": 50}]},
                 {"name": "יצירתיות", "weight": 20,
                  "sub_criteria": [{"name": "חדשנות", "weight": 50},
-                                  {"name": "פשטות ומהירות", "weight":20},
+                                  {"name": "פשטות ובהירות", "weight": 20},
                                   {"name": "רמה פדגוגית", "weight": 30}]},
                 {"name": "הצגה", "weight": 20, "sub_criteria": [{"name": "תיעוד", "weight": 100}]}
             ]
@@ -287,26 +370,27 @@ elif st.session_state.page == "dashboard":
             class_val = ""
             target_id = None
 
-            if mode == "Edit Existing Assignment":
+            if mode_en == "Edit Existing Assignment":
                 assigns = supabase.table("assignments").select("*").execute().data
                 if assigns:
                     opts = {f"{a['title']} ({a['class_name']})": a for a in assigns}
-                    sel = st.selectbox("Select Assignment", list(opts.keys()))
+                    sel = st.selectbox("בחר/י מטלה", list(opts.keys()))
                     target_a = opts[sel]
 
                     title_val = target_a["title"]
                     class_val = target_a["class_name"]
                     target_id = target_a["id"]
 
+                    # אם אצלך ב-DB נשמר תחת rubric (כמו בקוד המקורי שלך), נשאיר התאמה:
                     if isinstance(target_a.get("rubric"), list) and len(target_a["rubric"]) > 0:
                         current_rubric_data = target_a["rubric"]
                 else:
-                    st.info("No assignments to edit.")
+                    st.info("אין מטלות לעריכה.")
 
-            new_title = st.text_input("Title", value=title_val)
-            new_class = st.text_input("Class", value=class_val)
+            new_title = st.text_input("כותרת", value=title_val)
+            new_class = st.text_input("כיתה", value=class_val)
 
-            st.write("### 🏗️ Rubric Structure")
+            st.write("### 🏗️ מבנה מחוון")
             final_rubric = []
             total_weight = 0
             all_subs_valid = True
@@ -317,40 +401,46 @@ elif st.session_state.page == "dashboard":
                     if i < len(current_rubric_data) and isinstance(current_rubric_data[i], dict):
                         cat_data = current_rubric_data[i]
                     else:
-                        cat_data = {"name": f"Category {i + 1}", "weight": 0, "sub_criteria": []}
+                        cat_data = {"name": f"קטגוריה {i + 1}", "weight": 0, "sub_criteria": []}
 
-                    cat_name = cat_data.get("name", f"Category {i + 1}")
+                    cat_name = cat_data.get("name", f"קטגוריה {i + 1}")
                     cat_weight = int(cat_data.get("weight", 0))
 
                     st.markdown(f"#### {cat_name}")
-                    w = st.number_input(f"Weight %", 0, 100, cat_weight, key=f"w_{i}")
+                    w = st.number_input("משקל (%)", 0, 100, cat_weight, key=f"w_{i}")
                     total_weight += w
 
                     subs = cat_data.get("sub_criteria", [])
-                    if not isinstance(subs, list): subs = []
+                    if not isinstance(subs, list):
+                        subs = []
+
                     df = pd.DataFrame(subs)
                     if "name" not in df.columns or "weight" not in df.columns:
                         df = pd.DataFrame(columns=["name", "weight"])
 
-                    st.caption("Sub-Criteria")
+                    st.caption("תתי־קריטריונים")
+
+                    # ✅ נועל את עמודת name + לא מאפשר הוספה/מחיקה של שורות
                     edited_df = st.data_editor(
-                        df, num_rows="dynamic", key=f"ed_{i}", hide_index=True,
+                        df,
+                        key=f"ed_{i}",
+                        hide_index=True,
+                        width="stretch",
+                        num_rows="fixed",
+                        disabled=["name"],
                         column_config={
-                            "name": st.column_config.TextColumn("Criteria Name", required=True),
-                            "weight": st.column_config.NumberColumn("Weight", min_value=0, max_value=100, required=True)
+                            "name": st.column_config.TextColumn("שם קריטריון", required=True),
+                            "weight": st.column_config.NumberColumn("משקל", min_value=0, max_value=100, required=True)
                         }
                     )
 
-                    if "weight" in edited_df.columns:
-                        sub_sum = edited_df["weight"].sum()
-                    else:
-                        sub_sum = 0
+                    sub_sum = edited_df["weight"].sum() if "weight" in edited_df.columns else 0
 
                     if sub_sum != 100:
-                        st.error(f"Sum: {sub_sum}%")
+                        st.error(f"סכום תתי־קריטריונים: {sub_sum}%")
                         all_subs_valid = False
                     else:
-                        st.success("100% ✅")
+                        st.success("סכום תתי־קריטריונים: 100% ✅")
 
                     final_rubric.append({
                         "name": cat_name,
@@ -361,286 +451,291 @@ elif st.session_state.page == "dashboard":
             st.divider()
 
             if total_weight != 100:
-                st.error(f"Total Category Weight: {total_weight}% (Must be 100%)")
+                st.error(f"סה״כ משקל קטגוריות: {total_weight}% (חייב להיות 100%)")
                 main_valid = False
             else:
-                st.success(f"Total Category Weight: {total_weight}% ✅")
+                st.success(f"סה״כ משקל קטגוריות: {total_weight}% ✅")
                 main_valid = True
 
-            btn_text = "Create Assignment" if mode == "Create New Assignment" else "Update Assignment"
+            btn_text = "יצירת מטלה" if mode_en == "Create New Assignment" else "עדכון מטלה"
             c_btn1, c_btn2 = st.columns([1, 4])
+
             with c_btn1:
                 if st.button(btn_text):
                     if not main_valid or not all_subs_valid or not new_class.strip():
-                        st.error("Please fix errors above.")
+                        st.error("אנא תקן/י את השגיאות למעלה וודא/י ששדה כיתה אינו ריק.")
                     else:
                         rubric_payload = {
-                            "teacher_id": user['id'],
+                            "teacher_id": user["id"],
                             "title": new_title,
                             "class_name": new_class.strip(),
-                            "criteria": final_rubric
+                            "criteria": final_rubric  # חשוב: להשאיר keys לפי השרת
                         }
                         try:
-                            if mode == "Create New Assignment":
-                                res = requests.post(f"{API_URL}/teacher/rubrics", json=rubric_payload)
+                            if mode_en == "Create New Assignment":
+                                res = requests.post(f"{API_URL}/teacher/rubrics", json=rubric_payload, timeout=60)
                             else:
-                                res = requests.put(f"{API_URL}/teacher/rubrics/{target_id}", json=rubric_payload)
+                                res = requests.put(f"{API_URL}/teacher/rubrics/{target_id}", json=rubric_payload, timeout=60)
                             res.raise_for_status()
-                            st.success("Success!")
-                            time.sleep(1.5)
+                            st.success("נשמר בהצלחה ✅")
+                            time.sleep(1.2)
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Failed to save: {e}")
+                            st.error(f"❌ שמירה נכשלה: {e}")
 
-            if mode == "Edit Existing Assignment" and target_id:
+            if mode_en == "Edit Existing Assignment" and target_id:
                 with c_btn2:
-                    if st.button("🗑️ Delete Assignment", type="primary"):
+                    if st.button("🗑️ מחיקת מטלה", type="primary"):
                         try:
-                            res = requests.delete(f"{API_URL}/teacher/rubrics/{target_id}")
+                            res = requests.delete(f"{API_URL}/teacher/rubrics/{target_id}", timeout=60)
                             res.raise_for_status()
-                            st.success("Deleted!")
-                            time.sleep(1.5)
+                            st.success("נמחק ✅")
+                            time.sleep(1.2)
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Failed to delete: {e}")
+                            st.error(f"❌ מחיקה נכשלה: {e}")
 
-    # --- STUDENT DASHBOARD ---
+    # ========================================================
+    # STUDENT DASHBOARD
+    # ========================================================
     elif role == "student":
-        st.title("My Dashboard")
-        student_class = user.get('class_name', '').strip()
+        st.title("הלוח שלי")
+        student_class = user.get("class_name", "").strip()
 
         if not student_class:
-            st.warning("⚠️ You do not have a Class Name assigned. You won't see any assignments.")
+            st.warning("⚠️ לא הוגדרה לך כיתה בפרופיל. לא יוצגו מטלות.")
 
         assigns = supabase.table("assignments").select("*").eq("class_name", student_class).execute().data
-        subs = supabase.table("submissions").select("*").eq("student_id", user['id']).execute().data
-        sub_map = {s['assignment_id']: s for s in subs}
+        subs = supabase.table("submissions").select("*").eq("student_id", user["id"]).execute().data
+        sub_map = {s["assignment_id"]: s for s in subs}
 
         if not assigns and student_class:
-            st.info(f"No assignments found for class: '{student_class}'")
+            st.info(f"לא נמצאו מטלות לכיתה: '{student_class}'")
 
         for a in assigns:
             with st.container(border=True):
                 c1, c2 = st.columns([3, 1])
-                c1.subheader(a['title'])
-                s = sub_map.get(a['id'])
+                c1.subheader(a["title"])
+                s = sub_map.get(a["id"])
+
                 if s:
-                    c1.write(f"Status: {s['status']}")
-                    if s['status'] == "Graded":
-                        c2.metric("Score", s['final_score'])
-                        c1.success(s['feedback'])
+                    c1.write(f"סטטוס: {he_status(s['status'])}")
+                    if s["status"] == "Graded":
+                        c2.metric("ציון", s["final_score"])
+                        c1.success(s["feedback"])
                     else:
-                        with c2.popover("Edit Link"):
-                            l_edit = st.text_input("New Link", value=s['link'], key=f"edit_{a['id']}")
-                            if st.button("Update", key=f"update_{a['id']}"):
+                        with c2.popover("עריכת קישור"):
+                            l_edit = st.text_input("קישור חדש", value=s["link"], key=f"edit_{a['id']}")
+                            if st.button("עדכון", key=f"update_{a['id']}"):
                                 if not l_edit:
-                                    st.error("Please enter a link.")
+                                    st.error("אנא הזן/י קישור.")
                                 elif not l_edit.startswith("https://scratch.mit.edu/projects/"):
-                                    st.error("Link must start with https://scratch.mit.edu/projects/")
+                                    st.error("הקישור חייב להתחיל ב־ https://scratch.mit.edu/projects/")
                                 else:
                                     try:
                                         project_id = l_edit.rstrip("/").split("/")[-1]
-                                        check_resp = requests.get(f"https://api.scratch.mit.edu/projects/{project_id}", timeout=5)
+                                        check_resp = requests.get(
+                                            f"https://api.scratch.mit.edu/projects/{project_id}",
+                                            timeout=5
+                                        )
                                         if check_resp.status_code == 200:
-                                            supabase.table("submissions").update({"link": l_edit}).eq("id", s['id']).execute()
-                                            st.success("Updated!")
+                                            supabase.table("submissions").update({"link": l_edit}).eq("id", s["id"]).execute()
+                                            st.success("עודכן ✅")
                                             st.rerun()
                                         else:
-                                            st.error("Project does not exist or is unshared (API Check Failed).")
+                                            st.error("הפרויקט לא קיים או לא שותף (בדיקת API נכשלה).")
                                     except Exception as e:
-                                        st.error(f"Error checking link: {e}")
+                                        st.error(f"❌ שגיאה בבדיקת קישור: {e}")
+
                 else:
-                    c1.info("Not Submitted")
-                    with c2.popover("Submit"):
-                        l = st.text_input("Link", key=a['id'])
-                        if st.button("Send", key=f"b_{a['id']}"):
+                    c1.info("לא הוגש")
+                    with c2.popover("הגשה"):
+                        l = st.text_input("קישור", key=a["id"])
+                        if st.button("שליחה", key=f"b_{a['id']}"):
                             if not l:
-                                st.error("Please enter a link.")
+                                st.error("אנא הזן/י קישור.")
                             elif not l.startswith("https://scratch.mit.edu/projects/"):
-                                st.error("Link must start with https://scratch.mit.edu/projects/")
+                                st.error("הקישור חייב להתחיל ב־ https://scratch.mit.edu/projects/")
                             else:
                                 try:
                                     project_id = l.rstrip("/").split("/")[-1]
-                                    check_resp = requests.get(f"https://api.scratch.mit.edu/projects/{project_id}", timeout=5)
+                                    check_resp = requests.get(
+                                        f"https://api.scratch.mit.edu/projects/{project_id}",
+                                        timeout=5
+                                    )
                                     if check_resp.status_code == 200:
-                                        requests.post(f"{API_URL}/student/submit",
-                                                      json={"student_id": user['id'], "assignment_id": a['id'], "link": l})
-                                        st.success("Sent!")
+                                        requests.post(
+                                            f"{API_URL}/student/submit",
+                                            json={"student_id": user["id"], "assignment_id": a["id"], "link": l},
+                                            timeout=60
+                                        )
+                                        st.success("נשלח ✅")
                                         st.rerun()
                                     else:
-                                        st.error("Project does not exist or is unshared (API Check Failed).")
+                                        st.error("הפרויקט לא קיים או לא שותף (בדיקת API נכשלה).")
                                 except Exception as e:
-                                    st.error(f"Error checking link: {e}")
+                                    st.error(f"❌ שגיאה: {e}")
 
-    # --- ADMIN VIEW ---
+    # ========================================================
+    # ADMIN DASHBOARD
+    # ========================================================
     elif role == "admin":
-        st.title("Admin Overview")
+        st.title("לוח מנהל/ת")
 
-        # 1. Fetch Data
         users_data = supabase.table("users").select("*").execute().data
         assignments_data = supabase.table("assignments").select("*").execute().data
         submissions_data = supabase.table("submissions").select("*").execute().data
 
-        # 2. Key Metrics
-        graded_count = len([s for s in submissions_data if s['status'] == 'Graded'])
+        graded_count = len([s for s in submissions_data if s["status"] == "Graded"])
+
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Students", len([u for u in users_data if u['role'] == 'student']))
-        m2.metric("Teachers", len([u for u in users_data if u['role'] == 'teacher']))
-        m3.metric("Assignments", len(assignments_data) if assignments_data else 0)
-        m4.metric("Submissions", len(submissions_data), f"{graded_count} Graded")
+        m1.metric("תלמידים", len([u for u in users_data if u["role"] == "student"]))
+        m2.metric("מורים", len([u for u in users_data if u["role"] == "teacher"]))
+        m3.metric("מטלות", len(assignments_data) if assignments_data else 0)
+        m4.metric("הגשות", len(submissions_data), f"{graded_count} נבדקו")
 
         st.divider()
 
-        # 3. ADVANCED STATISTICS (NEW)
         c_chart1, c_chart2 = st.columns(2)
 
-        # Chart 1: Average Grade by Class
         with c_chart1:
-            st.subheader("📊 Class Performance")
+            st.subheader("📊 ביצועי כיתות")
             if assignments_data and submissions_data:
-                # Map Assignment ID -> Class Name
-                assign_class_map = {a['id']: a['class_name'] for a in assignments_data}
-
-                # Build Data: Class Name -> List of Grades
+                assign_class_map = {a["id"]: a["class_name"] for a in assignments_data}
                 class_grades = {}
                 for s in submissions_data:
-                    aid = s['assignment_id']
-                    if aid in assign_class_map and s.get('final_score') is not None:
+                    aid = s["assignment_id"]
+                    if aid in assign_class_map and s.get("final_score") is not None:
                         cname = assign_class_map[aid]
-                        if cname not in class_grades: class_grades[cname] = []
-                        class_grades[cname].append(s['final_score'])
+                        class_grades.setdefault(cname, []).append(s["final_score"])
 
-                # Calculate Averages
-                avg_data = {"Class": [], "Average Score": []}
+                avg_data = {"כיתה": [], "ממוצע ציון": []}
                 for cname, grades in class_grades.items():
-                    avg_data["Class"].append(cname)
-                    avg_data["Average Score"].append(sum(grades) / len(grades))
+                    avg_data["כיתה"].append(cname)
+                    avg_data["ממוצע ציון"].append(sum(grades) / len(grades))
 
-                if avg_data["Class"]:
-                    st.bar_chart(pd.DataFrame(avg_data).set_index("Class"))
+                if avg_data["כיתה"]:
+                    st.bar_chart(pd.DataFrame(avg_data).set_index("כיתה"))
                 else:
-                    st.info("No graded submissions yet.")
+                    st.info("אין עדיין הגשות שנבדקו.")
             else:
-                st.info("Insufficient data.")
+                st.info("אין מספיק נתונים.")
 
-        # Chart 2: Status Distribution
         with c_chart2:
-            st.subheader("🍩 Submission Status")
+            st.subheader("📌 סטטוס הגשות")
             if submissions_data:
-                status_counts = pd.Series([s['status'] for s in submissions_data]).value_counts()
-                st.bar_chart(status_counts)  # Pie chart requires plotly/altair, bar is safer for basic .streamlit
+                status_counts = pd.Series([he_status(s["status"]) for s in submissions_data]).value_counts()
+                st.bar_chart(status_counts)
             else:
-                st.info("No submissions.")
+                st.info("אין הגשות.")
 
         st.divider()
 
-        # 4. Detailed Table
-        st.subheader("📋 Detailed Assignment Stats")
+        st.subheader("📋 סטטיסטיקה מפורטת למטלות")
         if assignments_data:
             stats_data = []
             for a in assignments_data:
-                these_subs = [s for s in submissions_data if s['assignment_id'] == a['id']]
-                graded_subs = [s['final_score'] for s in these_subs if s.get('final_score') is not None]
+                these_subs = [s for s in submissions_data if s["assignment_id"] == a["id"]]
+                graded_subs = [s["final_score"] for s in these_subs if s.get("final_score") is not None]
                 avg_grade = sum(graded_subs) / len(graded_subs) if graded_subs else 0
 
                 stats_data.append({
-                    "Class": a['class_name'],
-                    "Assignment": a['title'],
-                    "Submissions": len(these_subs),
-                    "Avg Grade": f"{avg_grade:.1f}"
+                    "כיתה": a["class_name"],
+                    "מטלה": a["title"],
+                    "מספר הגשות": len(these_subs),
+                    "ממוצע": f"{avg_grade:.1f}"
                 })
             st.dataframe(pd.DataFrame(stats_data), width='stretch', hide_index=True)
 
-        # 5. Top Students Leaderboard (NEW)
-        with st.expander("🏆 Top Performing Students"):
+        with st.expander("🏆 תלמידים מצטיינים"):
             if users_data and submissions_data:
-                # Student ID -> Name
-                student_map = {u['id']: u.get('full_name', u['username']) for u in users_data if u['role'] == 'student'}
-                # Student ID -> Grades List
+                student_map = {u["id"]: u.get("full_name", u["username"]) for u in users_data if u["role"] == "student"}
                 student_grades = {}
                 for s in submissions_data:
-                    sid = s['student_id']
-                    if sid in student_map and s.get('final_score') is not None:
-                        if sid not in student_grades: student_grades[sid] = []
-                        student_grades[sid].append(s['final_score'])
+                    sid = s["student_id"]
+                    if sid in student_map and s.get("final_score") is not None:
+                        student_grades.setdefault(sid, []).append(s["final_score"])
 
                 leaderboard = []
                 for sid, grades in student_grades.items():
                     leaderboard.append({
-                        "Student": student_map[sid],
-                        "Average Score": sum(grades) / len(grades),
-                        "Projects Completed": len(grades)
+                        "תלמיד/ה": student_map[sid],
+                        "ממוצע ציון": sum(grades) / len(grades),
+                        "מספר פרויקטים": len(grades)
                     })
 
                 if leaderboard:
-                    df_leader = pd.DataFrame(leaderboard).sort_values("Average Score", ascending=False)
-                    st.dataframe(df_leader,  width='stretch', hide_index=True)
+                    df_leader = pd.DataFrame(leaderboard).sort_values("ממוצע ציון", ascending=False)
+                    st.dataframe(df_leader, width='stretch', hide_index=True)
                 else:
-                    st.info("No graded students yet.")
+                    st.info("אין עדיין תלמידים עם ציונים.")
 
         st.divider()
 
-        # 6. User Management
-        st.subheader("Create New User")
+        st.subheader("יצירת משתמש חדש")
         with st.form("create_user_form"):
             c1, c2 = st.columns(2)
-            new_username = c1.text_input("Username")
-            new_password = c2.text_input("Password", type="password")
-            new_fullname = c1.text_input("Full Name")
-            new_role = c2.selectbox("Role", ["student", "teacher", "admin"])
-            new_class = st.text_input("Class Name") if new_role == "student" else ""
+            new_username = c1.text_input("שם משתמש")
+            new_password = c2.text_input("סיסמה", type="password")
+            new_fullname = c1.text_input("שם מלא")
+            new_role = c2.selectbox("תפקיד", ["student", "teacher", "admin"], format_func=he_role)
+            new_class = st.text_input("שם כיתה") if new_role == "student" else ""
 
-            if st.form_submit_button("Create User"):
+            if st.form_submit_button("יצירה"):
                 if new_username and new_password:
                     try:
                         user_payload = {
-                            "username": new_username, "password": new_password,
-                            "full_name": new_fullname, "role": new_role,
+                            "username": new_username,
+                            "password": new_password,
+                            "full_name": new_fullname,
+                            "role": new_role,
                             "class_name": new_class.strip() if new_role == "student" else None
                         }
                         supabase.table("users").insert(user_payload).execute()
-                        st.success(f"User '{new_username}' created!")
+                        st.success(f"המשתמש '{new_username}' נוצר ✅")
                         time.sleep(1)
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error(f"❌ שגיאה: {e}")
+                else:
+                    st.error("אנא מלא/י שם משתמש וסיסמה.")
 
-        # User Database Table
         if users_data:
             df = pd.DataFrame(users_data)
             cols = ["username", "role", "full_name", "class_name", "password"]
             st.dataframe(df[[c for c in cols if c in df.columns]], width='stretch', hide_index=True)
 
-        st.subheader("Bulk Load Teachers")
-        with st.expander("📤 Upload Teachers via CSV"):
-            st.write("Upload a CSV with headers: `username`, `password`, `full_name`")
-            teacher_csv = st.file_uploader("Choose CSV File", type="csv", key="teacher_upload")
+        # ====================================================
+        # BULK LOAD TEACHERS (CSV) - מהקוד האנגלי, עם עברית
+        # ====================================================
+        st.subheader("טעינה מרוכזת של מורים")
+        with st.expander("📤 העלאת מורים מקובץ CSV"):
+            st.write("העלה/י קובץ CSV עם כותרות: `username`, `password`, `full_name`")
+            teacher_csv = st.file_uploader("בחר/י קובץ CSV", type="csv", key="teacher_upload")
 
             if teacher_csv is not None:
-                if st.button("Process Teacher CSV"):
+                if st.button("עיבוד והעלאה"):
                     try:
-                        # Read the CSV locally to iterate and upload to Supabase
-                        df = pd.read_csv(teacher_csv)
+                        df_csv = pd.read_csv(teacher_csv)
 
-                        # Basic validation of columns
-                        required_cols = ['username', 'password']
-                        if not all(col in df.columns for col in required_cols):
-                            st.error(f"CSV must contain at least: {required_cols}")
+                        required_cols = ["username", "password"]
+                        if not all(col in df_csv.columns for col in required_cols):
+                            st.error(f"CSV חייב להכיל לפחות: {required_cols}")
                         else:
                             success_count = 0
-                            for _, row in df.iterrows():
+                            for _, row in df_csv.iterrows():
                                 payload = {
-                                    "username": str(row['username']).strip(),
-                                    "password": str(row['password']).strip(),
-                                    "full_name": str(row.get('full_name', '')).strip(),
-                                    "role": "teacher",  # Force the role
+                                    "username": str(row["username"]).strip(),
+                                    "password": str(row["password"]).strip(),
+                                    "full_name": str(row.get("full_name", "")).strip(),
+                                    "role": "teacher",
                                     "class_name": None
                                 }
                                 supabase.table("users").insert(payload).execute()
                                 success_count += 1
 
-                            st.success(f"Successfully uploaded {success_count} teachers!")
+                            st.success(f"הועלו בהצלחה {success_count} מורים ✅")
                             time.sleep(1)
                             st.rerun()
                     except Exception as e:
-                        st.error(f"Failed to process CSV: {e}")
+                        st.error(f"❌ נכשל עיבוד הקובץ: {e}")
