@@ -27,13 +27,9 @@ def stats():
 def add_user(user_data: dict):
     return create_user(user_data)
 
-
-def bulk_add_users_from_csv(csv_content: str):
-    # Use io.StringIO to treat the string like a file for the csv module
+def bulk_add_teachers_from_csv(csv_content: str):
     f = io.StringIO(csv_content)
     reader = csv.DictReader(f)
-
-    # Sanitize keys (strip whitespace)
     reader.fieldnames = [name.strip() for name in reader.fieldnames]
 
     success_count = 0
@@ -41,28 +37,16 @@ def bulk_add_users_from_csv(csv_content: str):
 
     for row in reader:
         try:
-            # Basic Validation
-            if not row.get("username") or not row.get("password") or not row.get("role"):
-                errors.append(f"Skipped row {row}: Missing required fields.")
-                continue
-
-            # Prepare user data
             user_data = {
                 "username": row["username"].strip(),
                 "password": row["password"].strip(),
-                "role": row["role"].strip().lower(),
+                "role": "teacher", # Force the role to teacher
                 "full_name": row.get("full_name", "").strip(),
-                "class_name": row.get("class_name", "").strip()
+                "class_name": None
             }
-
-            # Create user (reusing existing repo logic)
             create_user(user_data)
             success_count += 1
-
         except Exception as e:
-            errors.append(f"Error creating {row.get('username', 'unknown')}: {str(e)}")
+            errors.append(f"Error creating {row.get('username')}: {str(e)}")
 
-    return {
-        "message": f"Successfully created {success_count} users.",
-        "errors": errors
-    }
+    return {"message": f"Successfully created {success_count} teachers.", "errors": errors}
