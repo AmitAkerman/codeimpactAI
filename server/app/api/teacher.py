@@ -20,6 +20,7 @@ def teacher_create_rubric(r: RubricCreate):
     create_rubric(teacher_id=r.teacher_id, title=r.title, criteria=r.criteria, class_name=r.class_name)
     return {"message": "Rubric Created"}
 
+
 @router.get("/rubrics")
 def teacher_list_rubrics():
     return get_rubrics()
