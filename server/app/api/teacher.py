@@ -17,7 +17,7 @@ def teacher_student_projects(student_id: int):
 
 @router.post("/rubrics")
 def teacher_create_rubric(r: RubricCreate):
-    create_rubric(r.teacher_id, r.title, r.criteria)
+    create_rubric(teacher_id=r.teacher_id, title=r.title, criteria=r.criteria, class_name=r.class_name)
     return {"message": "Rubric Created"}
 
 @router.get("/rubrics")

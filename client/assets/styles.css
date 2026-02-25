@@ -41,3 +41,13 @@ section[data-testid="stSidebar"] * {
 button, input, textarea {
   direction: rtl;
 }
+
+/* Hide ALL sidebar collapse controls (varies by Streamlit version) */
+
+[data-testid="collapsedControl"],
+button[title="Collapse sidebar"],
+button[title="Expand sidebar"],
+button[aria-label="Collapse sidebar"],
+button[aria-label="Expand sidebar"] {
+  display: none !important;
+}

@@ -6,7 +6,22 @@ from supabase import create_client
 from pathlib import Path
 
 from api.client import API_URL
+import time
+import streamlit as st
+import pandas as pd
+import requests
+from supabase import create_client
+from pathlib import Path
 
+from api.client import API_URL
+
+# חייב להיות פה! לפני כל st.* אחר
+st.set_page_config(
+    page_title="CodeImpact AI",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 # ============================================================
 # CONFIGURATION
 # מומלץ לשים מפתחות ב-.streamlit/secrets.toml ולא בקוד
@@ -71,9 +86,9 @@ def logout():
 # ============================================================
 # APP INIT
 # ============================================================
-supabase = init_supabase()
-st.set_page_config(page_title="CodeImpact AI", page_icon="🎓", layout="wide")
+
 load_css()
+supabase = init_supabase()
 
 if "page" not in st.session_state:
     st.session_state.page = "home"
@@ -208,9 +223,13 @@ elif st.session_state.page == "dashboard":
 
     role = user["role"]
 
-    st.sidebar.title(f"👤 {user.get('full_name', user['username'])}")
-    if st.sidebar.button("התנתקות"):
-        logout()
+    col1, col2, col3 = st.columns([6, 4, 3])  # widths: col1 wide, col2/3 narrow
+
+    with col3:
+        st.title(f"👤 {user.get('full_name', user['username'])}")
+    with col1:
+        if st.button("התנתקות"):
+            logout()
 
     # ========================================================
     # TEACHER DASHBOARD
@@ -223,118 +242,142 @@ elif st.session_state.page == "dashboard":
         # TAB 1: GRADING
         # ----------------------------
         with tab1:
-            st.subheader("הגשות תלמידים")
+            with tab1:
+                st.subheader("הגשות תלמידים")
 
-            all_subs = supabase.table("submissions").select("*").execute().data
-            all_users = {u["id"]: u.get("full_name", u.get("username", "לא ידוע/ה"))
-                         for u in supabase.table("users").select("id, full_name, username").execute().data}
-            all_assigns = {a["id"]: a for a in supabase.table("assignments").select("*").execute().data}
+                # 1) מטלות של המורה בלבד
+                teacher_assigns = supabase.table("assignments") \
+                                      .select("*") \
+                                      .eq("teacher_id", user["id"]) \
+                                      .execute().data or []
+                teacher_classes = sorted(list({a.get("class_name") for a in teacher_assigns if a.get("class_name")}))
+                students_rows = []
+                if teacher_classes:
+                    students_rows = supabase.table("users") \
+                                        .select("id, full_name, username, class_name") \
+                                        .eq("role", "student") \
+                                        .in_("class_name", teacher_classes) \
+                                        .execute().data or []
 
-            if not all_subs:
-                st.info("אין עדיין הגשות.")
+                all_assigns = {a["id"]: a for a in teacher_assigns}
+                teacher_assign_ids = list(all_assigns.keys())
 
-            filtered_subs = all_subs
+                if not teacher_assign_ids:
+                    st.info("אין לך עדיין מטלות. צור/י מטלה כדי לראות הגשות.")
+                else:
+                    # 2) רק הגשות למטלות של המורה
+                    all_subs = supabase.table("submissions") \
+                                   .select("*") \
+                                   .in_("assignment_id", teacher_assign_ids) \
+                                   .execute().data or []
 
-            if all_subs:
-                filter_mode_en = st.radio(
-                    "סינון לפי",
-                    ["All", "Student", "Assignment"],
-                    horizontal=True,
-                    format_func=lambda x: FILTER_MODE_HE.get(x, x)
-                )
+                    if not all_subs:
+                        st.info("אין עדיין הגשות למטלות שלך.")
+                    else:
+                        # 3) רק תלמידים רלוונטיים להגשות (Option A)
+                        student_ids = sorted(list({s["student_id"] for s in all_subs}))
+                        users_rows = supabase.table("users") \
+                                         .select("id, full_name, username") \
+                                         .in_("id", student_ids) \
+                                         .execute().data or []
 
-                if filter_mode_en == "Student":
-                    student_ids = sorted(
-                        list({s["student_id"] for s in all_subs}),
-                        key=lambda x: all_users.get(x, "לא ידוע/ה")
-                    )
-                    selected_student = st.selectbox(
-                        "בחר/י תלמיד/ה",
-                        student_ids,
-                        format_func=lambda x: all_users.get(x, "לא ידוע/ה")
-                    )
-                    filtered_subs = [s for s in all_subs if s["student_id"] == selected_student]
+                        all_users = {
+                            u["id"]: u.get("full_name", u.get("username", "לא ידוע/ה"))
+                            for u in users_rows
+                        }
 
-                elif filter_mode_en == "Assignment":
-                    assign_ids = sorted(
-                        list({s["assignment_id"] for s in all_subs}),
-                        key=lambda x: all_assigns.get(x, {}).get("title", "מטלה לא ידועה")
-                    )
-                    selected_assign = st.selectbox(
-                        "בחר/י מטלה",
-                        assign_ids,
-                        format_func=lambda x: all_assigns.get(x, {}).get("title", "מטלה לא ידועה")
-                    )
-                    filtered_subs = [s for s in all_subs if s["assignment_id"] == selected_assign]
+                        filtered_subs = all_subs
 
-            for s in filtered_subs:
-                s_name = all_users.get(s["student_id"], "תלמיד/ה לא ידוע/ה")
-                assignment_data = all_assigns.get(s["assignment_id"], {})
-                a_title = assignment_data.get("title", "מטלה לא ידועה")
-
-                # חשוב: לא לשנות keys שהשרת מצפה להם.
-                rubric_to_send = assignment_data.get("criteria", [])
-
-                with st.expander(f"{s_name} - {a_title}"):
-                    st.write(f"קישור: {s['link']}")
-
-                    if st.button("🤖 ניתוח עם AI", key=f"ai_{s['id']}"):
-                        with st.spinner("מנתח פרויקט עם AI ו-Dr. Scratch..."):
-                            try:
-                                payload = {
-                                    "project_url": s["link"],
-                                    "rubrics": rubric_to_send
-                                }
-                                response = requests.post(f"{API_URL}/teacher/analyze_ai", json=payload, timeout=120)
-                                response.raise_for_status()
-                                res = response.json()
-
-                                st.session_state[f"sc_{s['id']}"] = res.get("suggested_score", 0)
-                                st.session_state[f"fb_{s['id']}"] = res.get("suggested_feedback", "")
-
-                                st.success("הניתוח הושלם ✅")
-
-                                st.markdown("### 📝 משוב מפורט מה-AI")
-                                st.markdown(res.get("suggested_feedback", "לא התקבל משוב מפורט."))
-                                st.divider()
-
-                                if "raw_dr_scratch" in res:
-                                    with st.expander("נתונים טכניים (פרטי Dr. Scratch)"):
-                                        st.json(res["raw_dr_scratch"])
-
-                            except Exception as e:
-                                st.error(f"❌ שגיאה במהלך ניתוח AI: {e}")
-
-                    with st.form(f"grade_{s['id']}"):
-                        st.write("### ציון סופי")
-
-                        score = st.number_input(
-                            "ציון סופי (0–100)",
-                            min_value=0,
-                            max_value=100,
-                            value=int(st.session_state.get(f"sc_{s['id']}", 0))
+                        filter_mode_en = st.radio(
+                            "סינון לפי",
+                            ["All", "Student", "Assignment"],
+                            horizontal=True,
+                            format_func=lambda x: FILTER_MODE_HE.get(x, x)
                         )
 
-                        fb = st.text_area(
-                            "משוב סופי",
-                            value=st.session_state.get(f"fb_{s['id']}", ""),
-                            height=200
-                        )
+                        if filter_mode_en == "Student":
+                            selected_student = st.selectbox(
+                                "בחר/י תלמיד/ה",
+                                student_ids,
+                                format_func=lambda x: all_users.get(x, "לא ידוע/ה")
+                            )
+                            filtered_subs = [s for s in all_subs if s["student_id"] == selected_student]
 
-                        if st.form_submit_button("שמירת ציון"):
-                            try:
-                                supabase.table("submissions").update({
-                                    "final_score": score,
-                                    "feedback": fb,
-                                    "status": "Graded"  # חשוב: להשאיר באנגלית ב-DB
-                                }).eq("id", s["id"]).execute()
+                        elif filter_mode_en == "Assignment":
+                            assign_ids = sorted(
+                                list({s["assignment_id"] for s in all_subs}),
+                                key=lambda x: all_assigns.get(x, {}).get("title", "מטלה לא ידועה")
+                            )
+                            selected_assign = st.selectbox(
+                                "בחר/י מטלה",
+                                assign_ids,
+                                format_func=lambda x: all_assigns.get(x, {}).get("title", "מטלה לא ידועה")
+                            )
+                            filtered_subs = [s for s in all_subs if s["assignment_id"] == selected_assign]
 
-                                st.success(f"הציון עבור {s_name} נשמר ✅")
-                                time.sleep(1)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ שמירה נכשלה: {e}")
+                        for s in filtered_subs:
+                            s_name = all_users.get(s["student_id"], "תלמיד/ה לא ידוע/ה")
+                            assignment_data = all_assigns.get(s["assignment_id"], {})
+                            a_title = assignment_data.get("title", "מטלה לא ידועה")
 
+                            rubric_to_send = assignment_data.get("criteria", [])
+
+                            with st.expander(f"{s_name} - {a_title}"):
+                                st.write(f"קישור: {s['link']}")
+
+                                if st.button("🤖 ניתוח עם AI", key=f"ai_{s['id']}"):
+                                    with st.spinner("מנתח פרויקט עם AI ו-Dr. Scratch..."):
+                                        try:
+                                            payload = {"project_url": s["link"], "rubrics": rubric_to_send}
+                                            response = requests.post(f"{API_URL}/teacher/analyze_ai", json=payload,
+                                                                     timeout=120)
+                                            response.raise_for_status()
+                                            res = response.json()
+
+                                            st.session_state[f"sc_{s['id']}"] = res.get("suggested_score", 0)
+                                            st.session_state[f"fb_{s['id']}"] = res.get("suggested_feedback", "")
+
+                                            st.success("הניתוח הושלם ✅")
+                                            st.markdown("### 📝 משוב מפורט מה-AI")
+                                            st.markdown(res.get("suggested_feedback", "לא התקבל משוב מפורט."))
+                                            st.divider()
+
+                                            if "raw_dr_scratch" in res:
+                                                with st.expander("נתונים טכניים (פרטי Dr. Scratch)"):
+                                                    st.json(res["raw_dr_scratch"])
+
+                                        except Exception as e:
+                                            st.error(f"❌ שגיאה במהלך ניתוח AI: {e}")
+
+                                with st.form(f"grade_{s['id']}"):
+                                    st.write("### ציון סופי")
+
+                                    score = st.number_input(
+                                        "ציון סופי (0–100)",
+                                        min_value=0,
+                                        max_value=100,
+                                        value=int(st.session_state.get(f"sc_{s['id']}", 0))
+                                    )
+
+                                    fb = st.text_area(
+                                        "משוב סופי",
+                                        value=st.session_state.get(f"fb_{s['id']}", ""),
+                                        height=200
+                                    )
+
+                                    if st.form_submit_button("שמירת ציון"):
+                                        try:
+                                            supabase.table("submissions").update({
+                                                "final_score": score,
+                                                "feedback": fb,
+                                                "status": "Graded"
+                                            }).eq("id", s["id"]).execute()
+
+                                            st.success(f"הציון עבור {s_name} נשמר ✅")
+                                            time.sleep(1)
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ שמירה נכשלה: {e}")
         # ----------------------------
         # TAB 2: MANAGE ASSIGNMENTS
         # ----------------------------
@@ -371,7 +414,7 @@ elif st.session_state.page == "dashboard":
             target_id = None
 
             if mode_en == "Edit Existing Assignment":
-                assigns = supabase.table("assignments").select("*").execute().data
+                assigns = supabase.table("assignments").select("*").eq("teacher_id", user["id"]).execute().data
                 if assigns:
                     opts = {f"{a['title']} ({a['class_name']})": a for a in assigns}
                     sel = st.selectbox("בחר/י מטלה", list(opts.keys()))
@@ -643,9 +686,14 @@ elif st.session_state.page == "dashboard":
                     "כיתה": a["class_name"],
                     "מטלה": a["title"],
                     "מספר הגשות": len(these_subs),
-                    "ממוצע": f"{avg_grade:.1f}"
+                    "ממוצע": f"{avg_grade:.1f}",
                 })
-            st.dataframe(pd.DataFrame(stats_data), width='stretch', hide_index=True)
+
+            df = pd.DataFrame(stats_data)
+
+            st.table(
+                df
+            )
 
         with st.expander("🏆 תלמידים מצטיינים"):
             if users_data and submissions_data:
@@ -660,13 +708,13 @@ elif st.session_state.page == "dashboard":
                 for sid, grades in student_grades.items():
                     leaderboard.append({
                         "תלמיד/ה": student_map[sid],
-                        "ממוצע ציון": sum(grades) / len(grades),
+                        "ממוצע ציון": (sum(grades) / len(grades)),
                         "מספר פרויקטים": len(grades)
                     })
 
                 if leaderboard:
-                    df_leader = pd.DataFrame(leaderboard).sort_values("ממוצע ציון", ascending=False)
-                    st.dataframe(df_leader, width='stretch', hide_index=True)
+                    df_leader = pd.DataFrame(leaderboard).sort_values("ממוצע ציון", ascending=False).reset_index(drop=True)
+                    st.table(df_leader.style.format({"ממוצע ציון": "{:.2f}"}))
                 else:
                     st.info("אין עדיין תלמידים עם ציונים.")
 
@@ -703,7 +751,7 @@ elif st.session_state.page == "dashboard":
         if users_data:
             df = pd.DataFrame(users_data)
             cols = ["username", "role", "full_name", "class_name", "password"]
-            st.dataframe(df[[c for c in cols if c in df.columns]], width='stretch', hide_index=True)
+            st.table(df[[c for c in cols if c in df.columns]].style.format({"ממוצע ציון": "{:.2f}"}))
 
         # ====================================================
         # BULK LOAD TEACHERS (CSV) - מהקוד האנגלי, עם עברית
