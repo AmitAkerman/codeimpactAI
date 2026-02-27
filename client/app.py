@@ -391,22 +391,38 @@ elif st.session_state.page == "dashboard":
                 format_func=lambda x: MODE_HE.get(x, x)
             )
 
-            # תבנית ברירת מחדל למחוון
-            current_rubric_data = [
-                {"name": "קוד ואלגוריתמיקה", "weight": 40,
-                 "sub_criteria": [{"name": "ציון DR Scratch", "weight": 60},
-                                  {"name": "כמות אובייקטים", "weight": 10},
-                                  {"name": "שימוש באמצעי קלט", "weight": 10},
-                                  {"name": "אירועים ומסרים", "weight": 10},
-                                  {"name": "למידה עצמית", "weight": 10}]},
-                {"name": "שימושיות", "weight": 20,
-                 "sub_criteria": [{"name": "עיצוב וחווית המשתמש", "weight": 50},
-                                  {"name": "מולטימדיה", "weight": 50}]},
-                {"name": "יצירתיות", "weight": 20,
-                 "sub_criteria": [{"name": "חדשנות", "weight": 50},
-                                  {"name": "פשטות ובהירות", "weight": 20},
-                                  {"name": "רמה פדגוגית", "weight": 30}]},
-                {"name": "הצגה", "weight": 20, "sub_criteria": [{"name": "תיעוד", "weight": 100}]}
+            current_rubric_data =[
+                {
+                    "name": "קוד ואלגוריתמיקה",
+                    "weight": 40,
+                    "sub_criteria": [
+                    { "name": "כמות אובייקטים פעילים", "weight": 12 },
+                    { "name": "שימוש באמצעי קלט וחיישנים", "weight": 12 },
+                    { "name": "אירועים ומסרים בין דמויות", "weight": 15 },
+                    { "name": "תנאים, לולאות ותגובתיות", "weight": 25 },
+                    { "name": "שימוש במשתנים ואיפוס נכון", "weight": 20 },
+                    { "name": "סדר וארגון הקוד (יעילות)", "weight": 16 }
+                    ]
+                },
+                {
+                    "name": "עיצוב וחוויית משתמש",
+                    "weight": 30,
+                    "sub_criteria": [
+                    { "name": "נוחות השימוש וזרימת המשחק", "weight": 25 },
+                    { "name": "עיצוב דמויות ורקעים", "weight": 25 },
+                    { "name": "שילוב סאונד ואפקטים", "weight": 25 },
+                    { "name": "הוראות ברורות ותפריטים", "weight": 25 }
+                    ]
+                },
+                {
+                    "name": "יצירתיות ומחשבה אישית",
+                    "weight": 30,
+                    "sub_criteria": [
+                    { "name": "חדשנות ומקוריות ברעיון", "weight": 40 },
+                    { "name": "עקביות ומטרת פרויקט ברורה", "weight": 30 },
+                    { "name": "פתרונות חכמים לבעיות", "weight": 30 }
+                    ]
+                }
             ]
 
             title_val = ""
@@ -437,9 +453,9 @@ elif st.session_state.page == "dashboard":
             final_rubric = []
             total_weight = 0
             all_subs_valid = True
-            cols = st.columns(4)
+            cols = st.columns(3)
 
-            for i in range(4):
+            for i in range(3):
                 with cols[i]:
                     if i < len(current_rubric_data) and isinstance(current_rubric_data[i], dict):
                         cat_data = current_rubric_data[i]
@@ -618,6 +634,27 @@ elif st.session_state.page == "dashboard":
                                         st.error("הפרויקט לא קיים או לא שותף (בדיקת API נכשלה).")
                                 except Exception as e:
                                     st.error(f"❌ שגיאה: {e}")
+
+                with st.expander("📊 צפייה במחוון (קריטריונים לציון)"):
+                    criteria = a.get("rubric") or a.get("criteria")
+                    if not criteria or not isinstance(criteria, list):
+                        st.info("לא הוגדר מחוון למטלה זו.")
+                    else:
+                        for cat in criteria:
+                            if not isinstance(cat, dict):
+                                continue
+                            c_name = cat.get("name", "קטגוריה")
+                            c_weight = cat.get("weight", 0)
+                            st.markdown(f"**{c_name} ({c_weight}%)**")
+                            subs = cat.get("sub_criteria", [])
+                            if subs:
+                                for sub in subs:
+                                    if isinstance(sub, dict):
+                                        s_name = sub.get("name", "")
+                                        s_weight = sub.get("weight", 0)
+                                        st.markdown(f"- {s_name} ({s_weight}%)")
+                                    else:
+                                        st.markdown(f"- {sub}")
 
     # ========================================================
     # ADMIN DASHBOARD
