@@ -120,6 +120,7 @@ def fetch_assignments():
 
     return data
 
+
 @st.cache_data(ttl=20, show_spinner=False)
 def fetch_submissions():
     sb = init_supabase()
