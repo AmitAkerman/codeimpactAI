@@ -201,6 +201,7 @@ with APP.container():
 
         c1, c2, c3 = st.columns(3)
 
+
         with c1:
             st.markdown("""<div class="role-card"><h1>👨‍🎓</h1><h3>תלמיד/ה</h3></div>""", unsafe_allow_html=True)
             if not st.session_state["logged_in"]:
