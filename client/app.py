@@ -11,13 +11,42 @@ from api.client import API_URL
 # ============================================================
 # PAGE CONFIG (must be first Streamlit call)
 # ============================================================
+from pathlib import Path
+import streamlit as st
+
+ROOT = Path(__file__).parent
+LOGO = ROOT / "assets" / "logo_without_back.png"
+
 st.set_page_config(
-    page_title="CodeImpact AI",
-    page_icon="🎓",
+    page_title="Scratch AI",
+    page_icon=str(LOGO),
     layout="wide",
     initial_sidebar_state="expanded",
 )
+import base64
 
+def centered_title_with_logo(title: str, logo_path: Path, img_px: int = 90, font_px: int = 54, gap_px: int = 12):
+    b64 = base64.b64encode(logo_path.read_bytes()).decode("utf-8")
+    st.markdown(
+        f"""
+        <div style="
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            gap:{gap_px}px;
+            margin: 10px 0 8px 0;
+        ">
+            <span style="
+                font-size:{font_px}px;
+                font-weight:800;
+                line-height:1;
+                margin:0;
+            ">{title}</span>
+            <img src="data:image/png;base64,{b64}" style="width:{img_px}px; height:auto;" />
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 # ============================================================
 # CONFIGURATION
 # Put these in .streamlit/secrets.toml (recommended) like:
@@ -167,7 +196,7 @@ with APP.container():
     # PAGE: HOME
     # ============================================================
     if st.session_state.page == "home":
-        st.markdown("<h1 style='text-align: center;'>CodeImpact AI 🚀</h1>", unsafe_allow_html=True)
+        centered_title_with_logo("Scratch AI", LOGO, img_px=95, font_px=56, gap_px=10)
         st.divider()
 
         c1, c2, c3 = st.columns(3)
