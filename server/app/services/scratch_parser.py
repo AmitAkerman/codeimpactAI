@@ -6,7 +6,13 @@ import requests
 import re
 import json
 
-
+def get_project_token(project_id):
+    """Fetches the project token required to download assets."""
+    api_url = f"https://api.scratch.mit.edu/projects/{project_id}"
+    res = requests.get(api_url)
+    if res.status_code == 200:
+        return res.json().get('project_token')
+    return None
 def download_and_parse_scratch(url: str, token: str = None):
     """
     1. מחלצת Project ID.
