@@ -99,9 +99,6 @@ def analyze_ai(project_url: str, rubrics: List[Any]):
     ### נתוני קוד הפרויקט (Project Summary):
     {project_summary}
 
-    ### נתוני Dr. Scratch:
-    {dr_scratch_results}
-
     ### הנחיות עבודה למשוב:
     1. הצלבת נתונים: השתמש ברשימת ה-`broadcast_messages` ו-`total_sprites` מתוך נתוני הקוד כדי לקבוע את הציון בקטגוריית "ניהול אירועים ומסרים" ו"מספר אובייקטים".
     2. נימוק מבוסס ראיות: עבור כל קריטריון, ציין דוגמה ספציפית (שם של דמות, הודעת Broadcast ספציפית או בלוק מיוחד) שתומכת בציון שנתת.
@@ -133,14 +130,12 @@ def analyze_ai(project_url: str, rubrics: List[Any]):
             "suggested_score": 0,
             "suggested_feedback": f"שגיאה בעיבוד ה-AI: {str(e)}",
             "details": {},
-            "raw_dr_scratch": dr_scratch_results
         }
 
     return {
         "suggested_score": ai_response.get("suggested_score", 0),
         "suggested_feedback": ai_response.get("suggested_feedback", "לא ניתן לייצר משוב"),
         "details": ai_response.get("details", {}),
-        "raw_dr_scratch": dr_scratch_results
     }
 
 

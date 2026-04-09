@@ -45,16 +45,3 @@ def teacher_ai(req: AIAnalysisRequest):
 @router.post("/grade")
 def teacher_grade(g: GradeSubmit):
     return submit_grade(g.model_dump())
-
-@router.get("/test_dr_scratch/{project_id}")
-def test_dr_scratch(project_id: str, token: str = None):
-    if not token:
-        token = get_project_token(project_id)
-        print(f"DEBUG: Automatically fetched token: {token}")
-
-    result = download_and_parse_scratch(project_id, token)
-
-    if isinstance(result, dict) and "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-
-    return result

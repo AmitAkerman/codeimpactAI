@@ -505,7 +505,7 @@ with APP.container():
                                 st.write(f"קישור: {s.get('link', '')}")
 
                                 if st.button("🤖 ניתוח עם AI", key=f"ai_{s['id']}"):
-                                    with st.spinner("מנתח פרויקט עם AI ו-Dr. Scratch..."):
+                                    with st.spinner("מנתח פרויקט עם AI ..."):
                                         try:
                                             payload = {"project_url": s["link"], "rubrics": rubric_to_send}
                                             response = requests.post(
